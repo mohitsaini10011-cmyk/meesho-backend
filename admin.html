@@ -4,252 +4,359 @@
   <meta charset="UTF-8" />
   <title>Dyana Core Admin Panel</title>
   <style>
+    *{box-sizing:border-box}
     body{
       margin:0;
       font-family:Arial,sans-serif;
-      background:linear-gradient(135deg,#090014,#23064b);
+      background:linear-gradient(135deg,#090014,#22084f,#0b1020);
       color:#fff;
       padding:24px;
     }
-    .box{
-      max-width:1150px;
-      margin:auto;
+    .card{
       background:rgba(255,255,255,.08);
-      border:1px solid rgba(255,255,255,.18);
-      border-radius:24px;
-      padding:28px;
+      border:1px solid rgba(255,255,255,.16);
+      border-radius:22px;
+      padding:22px;
+      margin-bottom:20px;
+      box-shadow:0 18px 45px rgba(0,0,0,.25);
     }
-    h1{margin:0 0 8px;font-size:34px}
+    h1,h2,h3{margin:0 0 10px}
     p{color:#d8c7ff}
     input,select{
       width:100%;
-      padding:16px;
-      margin:10px 0;
-      border-radius:16px;
+      padding:14px;
+      margin:8px 0;
+      border-radius:14px;
       border:1px solid rgba(255,255,255,.2);
-      background:#140c25;
+      background:#120b22;
       color:#fff;
-      font-size:16px;
-      box-sizing:border-box;
+      font-size:15px;
     }
     button{
-      padding:14px 22px;
+      padding:12px 18px;
       border:0;
-      border-radius:16px;
+      border-radius:14px;
       background:linear-gradient(135deg,#8b5cf6,#ec4899);
       color:white;
       font-weight:800;
       cursor:pointer;
-      margin:6px;
-    }
-    .login{
-      max-width:560px;
-      margin:30px auto;
+      margin:4px;
     }
     .hidden{display:none}
-    .status{
-      padding:14px;
-      border-radius:14px;
-      margin:12px 0;
-      background:#32123a;
-      color:#ffd1e8;
-    }
-    table{
-      width:100%;
-      border-collapse:collapse;
-      margin-top:20px;
-      background:rgba(0,0,0,.18);
-      border-radius:16px;
-      overflow:hidden;
-    }
-    th,td{
-      padding:12px;
-      border-bottom:1px solid rgba(255,255,255,.12);
-      text-align:left;
-      font-size:13px;
-    }
+    .grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px}
+    .grid2{display:grid;grid-template-columns:repeat(2,1fr);gap:14px}
+    .stat{padding:18px;border-radius:18px;background:rgba(0,0,0,.22)}
+    .stat b{font-size:28px}
+    table{width:100%;border-collapse:collapse;margin-top:14px}
+    th,td{padding:11px;border-bottom:1px solid rgba(255,255,255,.12);font-size:13px;text-align:left}
     th{background:rgba(255,255,255,.12)}
-    .pill{
-      padding:5px 10px;
-      border-radius:999px;
-      background:#22c55e;
-      color:#04140a;
-      font-weight:800;
-    }
+    .pill{padding:5px 10px;border-radius:99px;background:#22c55e;color:#06140b;font-weight:800}
     .bad{background:#ef4444;color:#fff}
+    .warn{background:#f59e0b;color:#111}
+    .status{padding:12px;border-radius:14px;background:#33183d;color:#ffd1e8;margin:10px 0}
+    .tabs button{background:rgba(255,255,255,.12)}
+    .tabs button.active{background:linear-gradient(135deg,#8b5cf6,#ec4899)}
+    @media(max-width:900px){.grid,.grid2{grid-template-columns:1fr}}
   </style>
 </head>
 <body>
 
-  <div class="box">
-    <h1>💜 Dyana Core Admin Panel</h1>
-    <p>Manage users, subscriptions, IP/device lock, plans and login logs</p>
+<div class="card">
+  <h1>💜 Dyana Core Admin Panel</h1>
+  <p>Users, subscriptions, plans, IP/device lock, login logs and tool settings.</p>
+</div>
 
-    <div id="loginBox" class="login">
-      <h2>Admin Login</h2>
-      <div id="loginStatus" class="status hidden"></div>
-      <input id="adminEmail" value="admin@dyanacore.com" placeholder="Admin email" />
-      <input id="adminPassword" value="admin123" type="password" placeholder="Admin password" />
-      <button onclick="adminLogin()">Login</button>
-      <p style="color:#ffd166">Default: admin@dyanacore.com / admin123</p>
-    </div>
+<div id="loginBox" class="card" style="max-width:560px;margin:auto">
+  <h2>Admin Login</h2>
+  <div id="loginStatus" class="status hidden"></div>
+  <input id="adminEmail" value="admin@dyanacore.com" />
+  <input id="adminPassword" type="password" value="admin123" />
+  <button onclick="adminLogin()">Login</button>
+</div>
 
-    <div id="dashboard" class="hidden">
-      <button onclick="loadUsers()">Refresh Users</button>
-      <button onclick="logout()">Logout</button>
+<div id="dashboard" class="hidden">
+  <div class="card tabs">
+    <button class="active" onclick="showTab('overview',this)">Dashboard</button>
+    <button onclick="showTab('users',this)">Users</button>
+    <button onclick="showTab('plans',this)">Plans</button>
+    <button onclick="showTab('create',this)">Create User</button>
+    <button onclick="showTab('logs',this)">Login Logs</button>
+    <button onclick="showTab('settings',this)">Tool Settings</button>
+    <button onclick="loadAll()">Refresh</button>
+    <button onclick="logout()">Logout</button>
+  </div>
 
-      <div id="dashStatus" class="status hidden"></div>
+  <div id="dashStatus" class="status hidden"></div>
 
-      <h2>Users</h2>
-      <table>
-        <thead>
-          <tr>
-            <th>Email</th>
-            <th>Name</th>
-            <th>Plan</th>
-            <th>Expiry</th>
-            <th>Status</th>
-            <th>IP</th>
-            <th>Device</th>
-            <th>Actions</th>
-          </tr>
-        </thead>
-        <tbody id="usersBody"></tbody>
-      </table>
+  <div id="tab-overview" class="tab card">
+    <h2>Dashboard Stats</h2>
+    <div class="grid">
+      <div class="stat"><p>Total Users</p><b id="statUsers">0</b></div>
+      <div class="stat"><p>Active</p><b id="statActive">0</b></div>
+      <div class="stat"><p>Expired</p><b id="statExpired">0</b></div>
+      <div class="stat"><p>Blocked</p><b id="statBlocked">0</b></div>
     </div>
   </div>
 
+  <div id="tab-users" class="tab card hidden">
+    <h2>User Management</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Email</th><th>Name</th><th>Plan</th><th>Expiry</th><th>Status</th><th>IP</th><th>Device</th><th>Actions</th>
+        </tr>
+      </thead>
+      <tbody id="usersBody"></tbody>
+    </table>
+  </div>
+
+  <div id="tab-plans" class="tab card hidden">
+    <h2>Subscription Plans</h2>
+    <div id="plansList"></div>
+    <h3>Add / Update Plan</h3>
+    <div class="grid2">
+      <input id="planId" placeholder="plan id e.g. monthly" />
+      <input id="planName" placeholder="Plan name" />
+      <input id="planDays" type="number" placeholder="Days" />
+      <input id="planPrice" type="number" placeholder="Price" />
+    </div>
+    <button onclick="savePlan()">Save Plan</button>
+  </div>
+
+  <div id="tab-create" class="tab card hidden">
+    <h2>Create User</h2>
+    <div class="grid2">
+      <input id="newName" placeholder="Name" />
+      <input id="newEmail" placeholder="Email" />
+      <input id="newPassword" placeholder="Password" value="123456" />
+      <select id="newPlan"></select>
+    </div>
+    <button onclick="createUser()">Create User</button>
+  </div>
+
+  <div id="tab-logs" class="tab card hidden">
+    <h2>Login Logs</h2>
+    <table>
+      <thead>
+        <tr><th>Email</th><th>Type</th><th>Success</th><th>Reason</th><th>IP</th><th>Device</th><th>Time</th></tr>
+      </thead>
+      <tbody id="logsBody"></tbody>
+    </table>
+  </div>
+
+  <div id="tab-settings" class="tab card hidden">
+    <h2>Tool Feature Settings</h2>
+    <div class="grid2">
+      <label><input type="checkbox" id="setListing" checked /> AI Listing Generator</label>
+      <label><input type="checkbox" id="setImage" checked /> Image Optimizer</label>
+      <label><input type="checkbox" id="setShipping" checked /> Shipping Optimizer</label>
+      <label><input type="checkbox" id="setAutofill" checked /> Meesho Autofill</label>
+    </div>
+    <button onclick="saveSettings()">Save Settings</button>
+    <p>Note: UI settings save locally in browser. Backend settings API can be added later.</p>
+  </div>
+</div>
+
 <script>
 const SERVER_URL = "https://meesho-backend-ga8x.onrender.com";
-let ADMIN_TOKEN = localStorage.getItem("dc_admin_token") || "";
+let TOKEN = localStorage.getItem("dc_admin_token") || "";
+let USERS = [];
+let PLANS = [];
+let LOGS = [];
 
-if (ADMIN_TOKEN) {
+if(TOKEN){
   document.getElementById("loginBox").classList.add("hidden");
   document.getElementById("dashboard").classList.remove("hidden");
-  loadUsers();
+  loadAll();
 }
 
-function show(id, msg){
-  const el = document.getElementById(id);
-  el.textContent = msg;
+function msg(id,text){
+  const el=document.getElementById(id);
+  el.textContent=text;
   el.classList.remove("hidden");
+}
+
+function showTab(name,btn){
+  document.querySelectorAll(".tab").forEach(x=>x.classList.add("hidden"));
+  document.getElementById("tab-"+name).classList.remove("hidden");
+  document.querySelectorAll(".tabs button").forEach(b=>b.classList.remove("active"));
+  if(btn) btn.classList.add("active");
 }
 
 async function adminLogin(){
   try{
-    show("loginStatus","Logging in...");
-
-    const email = document.getElementById("adminEmail").value.trim();
-    const password = document.getElementById("adminPassword").value.trim();
-
-    const res = await fetch(`${SERVER_URL}/admin/login`,{
+    msg("loginStatus","Logging in...");
+    const res=await fetch(SERVER_URL+"/admin/login",{
       method:"POST",
-      headers:{ "Content-Type":"application/json" },
-      body:JSON.stringify({ email, password })
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({
+        email:document.getElementById("adminEmail").value.trim(),
+        password:document.getElementById("adminPassword").value.trim()
+      })
     });
-
-    const data = await res.json();
-
-    if(!data.success){
-      show("loginStatus", data.error || "Login failed");
-      return;
-    }
-
-    ADMIN_TOKEN = data.token;
-    localStorage.setItem("dc_admin_token", ADMIN_TOKEN);
-
+    const data=await res.json();
+    if(!data.success){msg("loginStatus",data.error||"Login failed");return;}
+    TOKEN=data.token;
+    localStorage.setItem("dc_admin_token",TOKEN);
     document.getElementById("loginBox").classList.add("hidden");
     document.getElementById("dashboard").classList.remove("hidden");
-
-    loadUsers();
-  }catch(e){
-    show("loginStatus","Server connection failed: " + e.message);
-  }
+    loadAll();
+  }catch(e){msg("loginStatus","Server error: "+e.message);}
 }
 
-async function loadUsers(){
+async function loadAll(){
   try{
-    const res = await fetch(`${SERVER_URL}/admin/users`,{
-      headers:{ Authorization:`Bearer ${ADMIN_TOKEN}` }
-    });
-
-    const data = await res.json();
-
-    if(!data.success){
-      show("dashStatus", data.error || "Failed to load users");
-      return;
-    }
-
-    const body = document.getElementById("usersBody");
-    body.innerHTML = "";
-
-    data.users.forEach(u=>{
-      const tr = document.createElement("tr");
-      tr.innerHTML = `
-        <td>${u.email}</td>
-        <td>${u.name || "-"}</td>
-        <td>${u.plan || "-"}</td>
-        <td>${u.expiry ? new Date(u.expiry).toLocaleString() : "-"}</td>
-        <td><span class="pill ${u.blocked || !u.active ? "bad":""}">${u.blocked ? "Blocked" : (u.active ? "Active" : "Expired")}</span></td>
-        <td>${u.lockedIp || "-"}</td>
-        <td>${u.lockedDevice || "-"}</td>
-        <td>
-          <select id="plan-${u.email}">
-            <option value="monthly">Monthly</option>
-            <option value="quarterly">3 Months</option>
-            <option value="half_yearly">6 Months</option>
-            <option value="yearly">Yearly</option>
-            <option value="lifetime">Lifetime</option>
-          </select>
-          <button onclick="updatePlan('${u.email}')">Update Plan</button>
-          <button onclick="resetDevice('${u.email}')">Reset IP/Device</button>
-          <button onclick="blockUser('${u.email}', ${!u.blocked})">${u.blocked ? "Unblock":"Block"}</button>
-          <button onclick="deleteUser('${u.email}')">Delete</button>
-        </td>
-      `;
-      body.appendChild(tr);
-    });
-  }catch(e){
-    show("dashStatus","Load error: " + e.message);
-  }
+    const res=await fetch(SERVER_URL+"/admin/users",{headers:{Authorization:"Bearer "+TOKEN}});
+    const data=await res.json();
+    if(!data.success){msg("dashStatus",data.error||"Failed");return;}
+    USERS=data.users||[];
+    PLANS=data.plans||[];
+    LOGS=data.logs||[];
+    renderStats(); renderUsers(); renderPlans(); renderLogs(); fillPlanSelects();
+  }catch(e){msg("dashStatus","Load error: "+e.message);}
 }
 
-async function apiPost(path, body){
-  const res = await fetch(`${SERVER_URL}${path}`,{
+function renderStats(){
+  const active=USERS.filter(u=>u.active).length;
+  const blocked=USERS.filter(u=>u.status==="blocked").length;
+  document.getElementById("statUsers").textContent=USERS.length;
+  document.getElementById("statActive").textContent=active;
+  document.getElementById("statBlocked").textContent=blocked;
+  document.getElementById("statExpired").textContent=USERS.length-active-blocked;
+}
+
+function renderUsers(){
+  const body=document.getElementById("usersBody");
+  body.innerHTML="";
+  USERS.forEach(u=>{
+    const plan=u.subscription?.planName||u.subscription?.planId||"-";
+    const expiry=u.subscription?.expiry?new Date(u.subscription.expiry).toLocaleString():"-";
+    const status=u.status==="blocked"?"Blocked":(u.active?"Active":"Expired");
+    const cls=u.status==="blocked"?"bad":(u.active?"":"warn");
+    const tr=document.createElement("tr");
+    tr.innerHTML=`
+      <td>${u.email}</td>
+      <td>${u.name||"-"}</td>
+      <td>${plan}</td>
+      <td>${expiry}</td>
+      <td><span class="pill ${cls}">${status}</span></td>
+      <td>${u.lockedIp||"-"}</td>
+      <td>${u.lockedDeviceId||"-"}</td>
+      <td>
+        <select id="plan-${u.id}">
+          ${PLANS.map(p=>`<option value="${p.id}">${p.name}</option>`).join("")}
+        </select>
+        <button onclick="updatePlan('${u.id}')">Update</button>
+        <button onclick="resetDevice('${u.id}')">Reset IP/Device</button>
+        <button onclick="blockUser('${u.id}',${u.status!=="blocked"})">${u.status==="blocked"?"Unblock":"Block"}</button>
+        <button onclick="deleteUser('${u.id}')">Delete</button>
+      </td>`;
+    body.appendChild(tr);
+  });
+}
+
+function renderPlans(){
+  const box=document.getElementById("plansList");
+  box.innerHTML="";
+  PLANS.forEach(p=>{
+    const div=document.createElement("div");
+    div.className="stat";
+    div.innerHTML=`<b>${p.name}</b><p>ID: ${p.id} | Days: ${p.days} | Price: ₹${p.price} | Active: ${p.active!==false}</p>
+    <button onclick="editPlan('${p.id}')">Edit</button>`;
+    box.appendChild(div);
+  });
+}
+
+function renderLogs(){
+  const body=document.getElementById("logsBody");
+  body.innerHTML="";
+  LOGS.forEach(l=>{
+    const tr=document.createElement("tr");
+    tr.innerHTML=`<td>${l.email||"-"}</td><td>${l.type||"-"}</td><td>${l.success}</td><td>${l.reason||"-"}</td><td>${l.ip||"-"}</td><td>${l.deviceId||"-"}</td><td>${l.at?new Date(l.at).toLocaleString():"-"}</td>`;
+    body.appendChild(tr);
+  });
+}
+
+function fillPlanSelects(){
+  const s=document.getElementById("newPlan");
+  s.innerHTML=PLANS.map(p=>`<option value="${p.id}">${p.name}</option>`).join("");
+}
+
+async function api(path,body){
+  const res=await fetch(SERVER_URL+path,{
     method:"POST",
-    headers:{
-      "Content-Type":"application/json",
-      Authorization:`Bearer ${ADMIN_TOKEN}`
-    },
+    headers:{"Content-Type":"application/json",Authorization:"Bearer "+TOKEN},
     body:JSON.stringify(body)
   });
   return res.json();
 }
 
-async function updatePlan(email){
-  const planId = document.getElementById(`plan-${email}`).value;
-  const data = await apiPost("/admin/users/update-plan",{ email, planId });
-  show("dashStatus", data.success ? "Plan updated" : data.error);
-  loadUsers();
+async function updatePlan(userId){
+  const planId=document.getElementById("plan-"+userId).value;
+  const data=await api("/admin/users/update-plan",{userId,planId});
+  msg("dashStatus",data.success?"Plan updated":data.error);
+  loadAll();
 }
 
-async function resetDevice(email){
-  const data = await apiPost("/admin/users/reset-device",{ email });
-  show("dashStatus", data.success ? "Device/IP reset" : data.error);
-  loadUsers();
+async function resetDevice(userId){
+  const data=await api("/admin/users/reset-device",{userId});
+  msg("dashStatus",data.success?"IP/device reset":data.error);
+  loadAll();
 }
 
-async function blockUser(email, blocked){
-  const data = await apiPost("/admin/users/block",{ email, blocked });
-  show("dashStatus", data.success ? "User updated" : data.error);
-  loadUsers();
+async function blockUser(userId,block){
+  const data=await api("/admin/users/block",{userId,block});
+  msg("dashStatus",data.success?"User updated":data.error);
+  loadAll();
 }
 
-async function deleteUser(email){
-  if(!confirm("Delete user?")) return;
-  const data = await apiPost("/admin/users/delete",{ email });
-  show("dashStatus", data.success ? "User deleted" : data.error);
-  loadUsers();
+async function deleteUser(userId){
+  if(!confirm("Delete user?"))return;
+  const data=await api("/admin/users/delete",{userId});
+  msg("dashStatus",data.success?"User deleted":data.error);
+  loadAll();
+}
+
+async function createUser(){
+  const data=await api("/admin/users/create",{
+    name:document.getElementById("newName").value,
+    email:document.getElementById("newEmail").value,
+    password:document.getElementById("newPassword").value,
+    planId:document.getElementById("newPlan").value
+  });
+  msg("dashStatus",data.success?"User created":data.error);
+  loadAll();
+}
+
+function editPlan(id){
+  const p=PLANS.find(x=>x.id===id);
+  if(!p)return;
+  document.getElementById("planId").value=p.id;
+  document.getElementById("planName").value=p.name;
+  document.getElementById("planDays").value=p.days;
+  document.getElementById("planPrice").value=p.price;
+}
+
+async function savePlan(){
+  const data=await api("/admin/plans/save",{plan:{
+    id:document.getElementById("planId").value.trim(),
+    name:document.getElementById("planName").value.trim(),
+    days:Number(document.getElementById("planDays").value),
+    price:Number(document.getElementById("planPrice").value),
+    active:true
+  }});
+  msg("dashStatus",data.success?"Plan saved":data.error);
+  loadAll();
+}
+
+function saveSettings(){
+  localStorage.setItem("dc_tool_settings",JSON.stringify({
+    listing:document.getElementById("setListing").checked,
+    image:document.getElementById("setImage").checked,
+    shipping:document.getElementById("setShipping").checked,
+    autofill:document.getElementById("setAutofill").checked
+  }));
+  msg("dashStatus","Settings saved locally");
 }
 
 function logout(){
