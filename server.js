@@ -1,666 +1,391 @@
+/**
+ * Dyana Core Seller Suite Backend
+ * Features:
+ * - Email/password signup + login
+ * - Subscription plans
+ * - One email = one locked IP/device
+ * - Admin panel APIs for users, plans, reset, block, subscription
+ * - Meesho AI routes used by the Chrome extension
+ */
+
+require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
 const multer = require("multer");
-const bcrypt = require("bcryptjs");
-const jwt = require("jsonwebtoken");
+const fs = require("fs");
+const path = require("path");
+const crypto = require("crypto");
+
+let OpenAI = null;
+try { OpenAI = require("openai").OpenAI; } catch (e) {}
 
 const app = express();
-const upload = multer({ storage: multer.memoryStorage() });
+const PORT = process.env.PORT || 10000;
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 20 * 1024 * 1024 } });
 
-app.use(cors({
-  origin: "*",
-  methods: ["GET", "POST", "OPTIONS"],
-  allowedHeaders: ["Content-Type", "Authorization"]
-}));
+const DATA_FILE = path.join(__dirname, "dyana-core-db.json");
+const ADMIN_EMAIL = process.env.ADMIN_EMAIL || "admin@dyanacore.com";
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "admin123";
+const JWT_SECRET = process.env.JWT_SECRET || "change-this-secret";
+const openai = OpenAI && process.env.OPENAI_API_KEY ? new OpenAI({ apiKey: process.env.OPENAI_API_KEY }) : null;
 
+app.set("trust proxy", true);
+app.use(cors({ origin: "*", methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"], allowedHeaders: ["Content-Type", "Authorization"] }));
 app.use(express.json({ limit: "25mb" }));
 app.use(express.urlencoded({ extended: true, limit: "25mb" }));
 
-const PORT = process.env.PORT || 10000;
-const JWT_SECRET = process.env.JWT_SECRET || "dyanacore_change_this_secret";
-const ADMIN_EMAIL = process.env.ADMIN_EMAIL || "admin@dyanacore.com";
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "admin123";
-
-/**
- * TEMPORARY MEMORY DATABASE
- * Render restart/redeploy ke baad normal users reset ho sakte hain.
- * Admin auto-create har restart par ho jayega.
- */
-const users = [];
-
-const plans = [
-  { id: "trial", name: "Free Trial", days: 3, price: 0 },
-  { id: "monthly", name: "Monthly Access", days: 30, price: 149 },
-  { id: "quarterly", name: "3 Months Access", days: 90, price: 399 },
-  { id: "half_yearly", name: "6 Months Access", days: 180, price: 699 },
-  { id: "yearly", name: "Yearly Access", days: 365, price: 999 },
-  { id: "lifetime", name: "Lifetime Access", days: 3650, price: 4999 }
-];
-
-async function createDefaultAdmin() {
-  const exists = users.find(u => u.email === ADMIN_EMAIL.toLowerCase());
-  if (exists) return;
-
-  const passwordHash = await bcrypt.hash(ADMIN_PASSWORD, 10);
-
-  users.push({
-    id: "admin-1",
-    name: "Dyana Core Admin",
-    email: ADMIN_EMAIL.toLowerCase(),
-    passwordHash,
-    role: "admin",
-    plan: "lifetime",
-    expiry: "2099-12-31T23:59:59.000Z",
-    lockedIp: "",
-    lockedDevice: "",
-    blocked: false,
-    createdAt: new Date().toISOString(),
-    loginLogs: []
-  });
-
-  console.log("Default admin created:", ADMIN_EMAIL);
-}
-
-createDefaultAdmin();
-
-function getClientIp(req) {
-  return (
-    req.headers["x-forwarded-for"]?.split(",")[0]?.trim() ||
-    req.headers["x-real-ip"] ||
-    req.socket.remoteAddress ||
-    "unknown"
-  );
-}
-
-function makeToken(user) {
-  return jwt.sign(
-    {
-      email: user.email,
-      role: user.role || "user"
-    },
-    JWT_SECRET,
-    { expiresIn: "30d" }
-  );
-}
-
-function auth(req, res, next) {
-  try {
-    const header = req.headers.authorization || "";
-    const token = header.startsWith("Bearer ")
-      ? header.replace("Bearer ", "")
-      : header;
-
-    if (!token) {
-      return res.status(401).json({
-        success: false,
-        error: "NO_TOKEN"
-      });
-    }
-
-    req.user = jwt.verify(token, JWT_SECRET);
-    next();
-  } catch (err) {
-    return res.status(401).json({
-      success: false,
-      error: "INVALID_TOKEN"
-    });
-  }
-}
-
-function adminAuth(req, res, next) {
-  auth(req, res, () => {
-    if (!req.user || req.user.role !== "admin") {
-      return res.status(403).json({
-        success: false,
-        error: "ADMIN_ONLY"
-      });
-    }
-    next();
-  });
-}
-
-function isActive(user) {
-  return Boolean(
-    user &&
-    !user.blocked &&
-    user.expiry &&
-    new Date(user.expiry).getTime() > Date.now()
-  );
-}
-
-function safeUser(user) {
+function defaultDB() {
   return {
-    id: user.id,
-    name: user.name,
-    email: user.email,
-    role: user.role,
-    plan: user.plan,
-    expiry: user.expiry,
-    lockedIp: user.lockedIp,
-    lockedDevice: user.lockedDevice,
-    blocked: user.blocked,
-    createdAt: user.createdAt,
-    active: isActive(user),
-    loginLogs: user.loginLogs || []
+    plans: [
+      { id: "trial", name: "Free Trial", days: 3, price: 0, active: true },
+      { id: "monthly", name: "Monthly", days: 30, price: 499, active: true },
+      { id: "quarterly", name: "3 Months", days: 90, price: 1299, active: true },
+      { id: "yearly", name: "Yearly", days: 365, price: 3999, active: true },
+      { id: "lifetime", name: "Lifetime", days: 36500, price: 9999, active: true }
+    ],
+    users: [],
+    loginLogs: []
   };
 }
-
-function findUserByEmail(email) {
-  return users.find(u => u.email === String(email || "").toLowerCase().trim());
+function readDB() {
+  try {
+    if (!fs.existsSync(DATA_FILE)) fs.writeFileSync(DATA_FILE, JSON.stringify(defaultDB(), null, 2));
+    return JSON.parse(fs.readFileSync(DATA_FILE, "utf8"));
+  } catch {
+    return defaultDB();
+  }
 }
-
+function writeDB(db) { fs.writeFileSync(DATA_FILE, JSON.stringify(db, null, 2)); }
+function normEmail(email) { return String(email || "").trim().toLowerCase(); }
+function nowISO() { return new Date().toISOString(); }
+function clientIp(req) {
+  return (req.headers["x-forwarded-for"] || req.ip || req.connection?.remoteAddress || "")
+    .toString().split(",")[0].trim().replace("::ffff:", "");
+}
+function hashPassword(password, salt = crypto.randomBytes(16).toString("hex")) {
+  const hash = crypto.pbkdf2Sync(String(password), salt, 120000, 64, "sha512").toString("hex");
+  return `${salt}:${hash}`;
+}
+function verifyPassword(password, stored) {
+  const [salt, hash] = String(stored || "").split(":");
+  if (!salt || !hash) return false;
+  const test = crypto.pbkdf2Sync(String(password), salt, 120000, 64, "sha512").toString("hex");
+  return crypto.timingSafeEqual(Buffer.from(hash, "hex"), Buffer.from(test, "hex"));
+}
+function tokenSign(payload) {
+  const body = Buffer.from(JSON.stringify(payload)).toString("base64url");
+  const sig = crypto.createHmac("sha256", JWT_SECRET).update(body).digest("base64url");
+  return `${body}.${sig}`;
+}
+function tokenVerify(token) {
+  const [body, sig] = String(token || "").split(".");
+  if (!body || !sig) return null;
+  const expected = crypto.createHmac("sha256", JWT_SECRET).update(body).digest("base64url");
+  if (sig !== expected) return null;
+  try { return JSON.parse(Buffer.from(body, "base64url").toString()); } catch { return null; }
+}
 function addDays(days) {
   const d = new Date();
   d.setDate(d.getDate() + Number(days || 30));
   return d.toISOString();
 }
+function isExpired(user) {
+  if (!user?.subscription?.expiry) return true;
+  return new Date(user.subscription.expiry).getTime() < Date.now();
+}
+function publicUser(user) {
+  return {
+    id: user.id,
+    email: user.email,
+    name: user.name || "",
+    status: user.status || "active",
+    lockedIp: user.lockedIp || "",
+    lockedDeviceId: user.lockedDeviceId || "",
+    subscription: user.subscription || {},
+    createdAt: user.createdAt,
+    lastLoginAt: user.lastLoginAt
+  };
+}
+function authRequired(req, res, next) {
+  const token = (req.headers.authorization || "").replace(/^Bearer\s+/i, "");
+  const payload = tokenVerify(token);
+  if (!payload?.uid) return res.status(401).json({ success: false, error: "LOGIN_REQUIRED" });
+  const db = readDB();
+  const user = db.users.find(u => u.id === payload.uid);
+  if (!user) return res.status(401).json({ success: false, error: "USER_NOT_FOUND" });
+  if (user.status === "blocked") return res.status(403).json({ success: false, error: "ACCOUNT_BLOCKED" });
+  if (isExpired(user)) return res.status(402).json({ success: false, error: "SUBSCRIPTION_EXPIRED" });
+  req.user = user;
+  next();
+}
+function adminRequired(req, res, next) {
+  const token = (req.headers.authorization || "").replace(/^Bearer\s+/i, "");
+  const payload = tokenVerify(token);
+  if (payload?.role === "admin") return next();
+  return res.status(401).json({ success: false, error: "ADMIN_LOGIN_REQUIRED" });
+}
 
-app.get("/", (req, res) => {
-  res.send("Dyana Core Seller Suite Backend Live");
+app.get("/", (req, res) => res.send("Dyana Core Seller Suite Backend Live"));
+app.get("/health", (req, res) => res.json({ status: "ok", server: "dyana-core-seller-suite", time: nowISO() }));
+app.get("/plans", (req, res) => res.json({ success: true, plans: readDB().plans.filter(p => p.active) }));
+
+app.post("/auth/signup", (req, res) => {
+  const db = readDB();
+  const email = normEmail(req.body.email);
+  const password = String(req.body.password || "");
+  const name = String(req.body.name || "").trim();
+  const deviceId = String(req.body.deviceId || "").trim();
+  const ip = clientIp(req);
+
+  if (!email || !email.includes("@")) return res.status(400).json({ success: false, error: "Valid email required" });
+  if (password.length < 6) return res.status(400).json({ success: false, error: "Password minimum 6 characters" });
+  if (db.users.some(u => u.email === email)) return res.status(409).json({ success: false, error: "Email already registered. Please login." });
+
+  const trial = db.plans.find(p => p.id === "trial") || { days: 3, name: "Free Trial" };
+  const user = {
+    id: crypto.randomUUID(),
+    email,
+    name,
+    passwordHash: hashPassword(password),
+    status: "active",
+    lockedIp: ip,
+    lockedDeviceId: deviceId || crypto.randomUUID(),
+    subscription: { planId: "trial", planName: trial.name, expiry: addDays(trial.days), paymentStatus: "trial" },
+    createdAt: nowISO(),
+    lastLoginAt: nowISO()
+  };
+  db.users.push(user);
+  db.loginLogs.push({ email, ip, deviceId, type: "signup", at: nowISO(), success: true });
+  writeDB(db);
+
+  const token = tokenSign({ uid: user.id, email: user.email, role: "user", iat: Date.now() });
+  res.json({ success: true, token, user: publicUser(user) });
 });
 
-app.get("/health", (req, res) => {
-  res.json({
-    status: "ok",
-    server: "dyana-core-seller-suite",
-    port: String(PORT),
-    openai_key_set: !!process.env.OPENAI_API_KEY,
-    users_count: users.length,
-    admin_email: ADMIN_EMAIL
-  });
-});
+app.post("/auth/login", (req, res) => {
+  const db = readDB();
+  const email = normEmail(req.body.email);
+  const password = String(req.body.password || "");
+  const deviceId = String(req.body.deviceId || "").trim();
+  const ip = clientIp(req);
+  const user = db.users.find(u => u.email === email);
 
-app.get("/plans", (req, res) => {
-  res.json({
-    success: true,
-    plans
-  });
-});
-
-/* ================= AUTH APIs ================= */
-
-app.post("/auth/signup", async (req, res) => {
-  try {
-    const { name, email, password, deviceId } = req.body;
-    const ip = getClientIp(req);
-
-    if (!email || !password) {
-      return res.status(400).json({
-        success: false,
-        error: "EMAIL_PASSWORD_REQUIRED"
-      });
-    }
-
-    const cleanEmail = String(email).toLowerCase().trim();
-
-    if (findUserByEmail(cleanEmail)) {
-      return res.status(400).json({
-        success: false,
-        error: "EMAIL_ALREADY_EXISTS"
-      });
-    }
-
-    const passwordHash = await bcrypt.hash(password, 10);
-
-    const user = {
-      id: "user-" + Date.now(),
-      name: name || "",
-      email: cleanEmail,
-      passwordHash,
-      role: "user",
-      plan: "trial",
-      expiry: addDays(3),
-      lockedIp: ip,
-      lockedDevice: deviceId || "",
-      blocked: false,
-      createdAt: new Date().toISOString(),
-      loginLogs: [
-        {
-          type: "signup",
-          ip,
-          deviceId: deviceId || "",
-          time: new Date().toISOString()
-        }
-      ]
-    };
-
-    users.push(user);
-
-    return res.json({
-      success: true,
-      token: makeToken(user),
-      user: safeUser(user)
-    });
-  } catch (err) {
-    return res.status(500).json({
-      success: false,
-      error: err.message
-    });
+  if (!user || !verifyPassword(password, user.passwordHash)) {
+    db.loginLogs.push({ email, ip, deviceId, type: "login", at: nowISO(), success: false, reason: "bad_credentials" });
+    writeDB(db);
+    return res.status(401).json({ success: false, error: "Invalid email or password" });
   }
-});
+  if (user.status === "blocked") return res.status(403).json({ success: false, error: "Your account is blocked. Contact admin." });
+  if (isExpired(user)) return res.status(402).json({ success: false, error: "Subscription expired. Please renew your plan." });
 
-app.post("/auth/login", async (req, res) => {
-  try {
-    const { email, password, deviceId } = req.body;
-    const ip = getClientIp(req);
-
-    const user = findUserByEmail(email);
-
-    if (!user) {
-      return res.status(401).json({
-        success: false,
-        error: "USER_NOT_FOUND"
-      });
-    }
-
-    const passwordOk = await bcrypt.compare(password || "", user.passwordHash);
-
-    if (!passwordOk) {
-      return res.status(401).json({
-        success: false,
-        error: "WRONG_PASSWORD"
-      });
-    }
-
-    if (user.blocked) {
-      return res.status(403).json({
-        success: false,
-        error: "ACCOUNT_BLOCKED"
-      });
-    }
-
-    if (!isActive(user)) {
-      return res.status(403).json({
-        success: false,
-        error: "SUBSCRIPTION_EXPIRED",
-        user: safeUser(user)
-      });
-    }
-
-    /**
-     * One email = one IP/device lock
-     * Admin users ko lock se free rakha hai.
-     */
-    if (user.role !== "admin") {
-      if (user.lockedIp && user.lockedIp !== ip) {
-        return res.status(403).json({
-          success: false,
-          error: "IP_DEVICE_LOCKED",
-          message:
-            "This email is already active on another IP/device. Please buy another subscription or ask admin to reset."
-        });
-      }
-
-      if (!user.lockedIp) user.lockedIp = ip;
-      if (!user.lockedDevice) user.lockedDevice = deviceId || "";
-    }
-
-    user.loginLogs = user.loginLogs || [];
-    user.loginLogs.unshift({
-      type: "login",
-      ip,
-      deviceId: deviceId || "",
-      time: new Date().toISOString()
-    });
-
-    user.loginLogs = user.loginLogs.slice(0, 20);
-
-    return res.json({
-      success: true,
-      token: makeToken(user),
-      user: safeUser(user)
-    });
-  } catch (err) {
-    return res.status(500).json({
-      success: false,
-      error: err.message
-    });
+  if (user.lockedIp && user.lockedIp !== ip) {
+    db.loginLogs.push({ email, ip, deviceId, type: "login", at: nowISO(), success: false, reason: "ip_locked", lockedIp: user.lockedIp });
+    writeDB(db);
+    return res.status(423).json({ success: false, error: "This email is already active on another IP. Please buy another subscription or ask admin to reset IP." });
   }
-});
-
-app.post("/auth/check-session", auth, (req, res) => {
-  const user = findUserByEmail(req.user.email);
-
-  if (!user) {
-    return res.status(404).json({
-      success: false,
-      error: "USER_NOT_FOUND"
-    });
+  if (user.lockedDeviceId && deviceId && user.lockedDeviceId !== deviceId) {
+    db.loginLogs.push({ email, ip, deviceId, type: "login", at: nowISO(), success: false, reason: "device_locked", lockedDeviceId: user.lockedDeviceId });
+    writeDB(db);
+    return res.status(423).json({ success: false, error: "This email is already active on another device. Please buy another subscription or ask admin to reset device." });
   }
+  user.lockedIp = user.lockedIp || ip;
+  user.lockedDeviceId = user.lockedDeviceId || deviceId;
+  user.lastLoginAt = nowISO();
+  db.loginLogs.push({ email, ip, deviceId, type: "login", at: nowISO(), success: true });
+  writeDB(db);
 
-  return res.json({
-    success: true,
-    active: isActive(user),
-    user: safeUser(user)
-  });
+  const token = tokenSign({ uid: user.id, email: user.email, role: "user", iat: Date.now() });
+  res.json({ success: true, token, user: publicUser(user) });
 });
 
-app.post("/auth/logout", auth, (req, res) => {
-  return res.json({
-    success: true,
-    message: "Logged out"
-  });
+app.post("/auth/check-session", authRequired, (req, res) => {
+  res.json({ success: true, user: publicUser(req.user) });
 });
-
-/* ================= ADMIN APIs ================= */
-
-app.post("/admin/login", async (req, res) => {
-  try {
-    const { email, password } = req.body;
-
-    const cleanEmail = String(email || "").toLowerCase().trim();
-
-    if (cleanEmail === ADMIN_EMAIL.toLowerCase() && password === ADMIN_PASSWORD) {
-      const adminUser = findUserByEmail(ADMIN_EMAIL);
-
-      return res.json({
-        success: true,
-        token: makeToken(adminUser || { email: ADMIN_EMAIL, role: "admin" }),
-        admin: safeUser(adminUser)
-      });
-    }
-
-    const user = findUserByEmail(cleanEmail);
-
-    if (!user || user.role !== "admin") {
-      return res.status(401).json({
-        success: false,
-        error: "INVALID_ADMIN_LOGIN"
-      });
-    }
-
-    const ok = await bcrypt.compare(password || "", user.passwordHash);
-
-    if (!ok) {
-      return res.status(401).json({
-        success: false,
-        error: "INVALID_ADMIN_LOGIN"
-      });
-    }
-
-    return res.json({
-      success: true,
-      token: makeToken(user),
-      admin: safeUser(user)
-    });
-  } catch (err) {
-    return res.status(500).json({
-      success: false,
-      error: err.message
-    });
-  }
-});
-
-app.get("/admin/users", adminAuth, (req, res) => {
-  return res.json({
-    success: true,
-    users: users.map(safeUser)
-  });
-});
-
-app.post("/admin/users/update-plan", adminAuth, (req, res) => {
-  const { email, planId, days } = req.body;
-  const user = findUserByEmail(email);
-
-  if (!user) {
-    return res.status(404).json({
-      success: false,
-      error: "USER_NOT_FOUND"
-    });
-  }
-
-  const plan = plans.find(p => p.id === planId);
-  const finalDays = Number(days || plan?.days || 30);
-
-  user.plan = planId || "monthly";
-  user.expiry = addDays(finalDays);
-  user.blocked = false;
-
-  return res.json({
-    success: true,
-    user: safeUser(user)
-  });
-});
-
-app.post("/admin/users/block", adminAuth, (req, res) => {
-  const { email, blocked } = req.body;
-  const user = findUserByEmail(email);
-
-  if (!user) {
-    return res.status(404).json({
-      success: false,
-      error: "USER_NOT_FOUND"
-    });
-  }
-
-  user.blocked = Boolean(blocked);
-
-  return res.json({
-    success: true,
-    user: safeUser(user)
-  });
-});
-
-app.post("/admin/users/delete", adminAuth, (req, res) => {
-  const { email } = req.body;
-  const index = users.findIndex(
-    u => u.email === String(email || "").toLowerCase().trim()
-  );
-
-  if (index === -1) {
-    return res.status(404).json({
-      success: false,
-      error: "USER_NOT_FOUND"
-    });
-  }
-
-  users.splice(index, 1);
-
-  return res.json({
-    success: true,
-    message: "User deleted"
-  });
-});
-
-app.post("/admin/users/reset-device", adminAuth, (req, res) => {
-  const { email } = req.body;
-  const user = findUserByEmail(email);
-
-  if (!user) {
-    return res.status(404).json({
-      success: false,
-      error: "USER_NOT_FOUND"
-    });
-  }
-
-  user.lockedIp = "";
-  user.lockedDevice = "";
-
-  return res.json({
-    success: true,
-    user: safeUser(user)
-  });
-});
-
-/* ================= OLD LICENSE API SUPPORT ================= */
 
 app.post("/validate-license", (req, res) => {
-  return res.json({
-    valid: true,
-    plan: "premium",
-    remainingDays: 999,
-    message: "License bypass active via Dyana Core subscription system"
-  });
+  res.json({ success: true, valid: true, plan: "email-login", remainingDays: 999, message: "Use email/password login" });
 });
 
-/* ================= AI / LISTING APIs ================= */
+app.post("/admin/login", (req, res) => {
+  const email = normEmail(req.body.email);
+  const password = String(req.body.password || "");
+  if (email === normEmail(ADMIN_EMAIL) && password === ADMIN_PASSWORD) {
+    return res.json({ success: true, token: tokenSign({ role: "admin", email, iat: Date.now() }) });
+  }
+  res.status(401).json({ success: false, error: "Invalid admin email/password" });
+});
+
+app.get("/admin/users", adminRequired, (req, res) => {
+  const db = readDB();
+  res.json({ success: true, users: db.users.map(publicUser), plans: db.plans, logs: db.loginLogs.slice(-100).reverse() });
+});
+
+app.post("/admin/users/create", adminRequired, (req, res) => {
+  const db = readDB();
+  const email = normEmail(req.body.email);
+  const password = String(req.body.password || "123456");
+  if (!email || db.users.some(u => u.email === email)) return res.status(400).json({ success: false, error: "Email missing or already exists" });
+  const planId = req.body.planId || "monthly";
+  const plan = db.plans.find(p => p.id === planId) || db.plans[1];
+  const user = {
+    id: crypto.randomUUID(), email, name: req.body.name || "", passwordHash: hashPassword(password),
+    status: "active", lockedIp: "", lockedDeviceId: "",
+    subscription: { planId: plan.id, planName: plan.name, expiry: addDays(plan.days), paymentStatus: "paid" },
+    createdAt: nowISO(), lastLoginAt: ""
+  };
+  db.users.push(user); writeDB(db);
+  res.json({ success: true, user: publicUser(user) });
+});
+
+app.post("/admin/users/update-plan", adminRequired, (req, res) => {
+  const db = readDB();
+  const user = db.users.find(u => u.id === req.body.userId || u.email === normEmail(req.body.email));
+  const plan = db.plans.find(p => p.id === req.body.planId);
+  if (!user || !plan) return res.status(404).json({ success: false, error: "User or plan not found" });
+  user.subscription = { planId: plan.id, planName: plan.name, expiry: addDays(req.body.days || plan.days), paymentStatus: req.body.paymentStatus || "paid" };
+  writeDB(db);
+  res.json({ success: true, user: publicUser(user) });
+});
+
+app.post("/admin/users/block", adminRequired, (req, res) => {
+  const db = readDB();
+  const user = db.users.find(u => u.id === req.body.userId || u.email === normEmail(req.body.email));
+  if (!user) return res.status(404).json({ success: false, error: "User not found" });
+  user.status = req.body.block ? "blocked" : "active";
+  writeDB(db);
+  res.json({ success: true, user: publicUser(user) });
+});
+
+app.post("/admin/users/reset-lock", adminRequired, (req, res) => {
+  const db = readDB();
+  const user = db.users.find(u => u.id === req.body.userId || u.email === normEmail(req.body.email));
+  if (!user) return res.status(404).json({ success: false, error: "User not found" });
+  user.lockedIp = "";
+  user.lockedDeviceId = "";
+  writeDB(db);
+  res.json({ success: true, user: publicUser(user) });
+});
+
+app.post("/admin/users/delete", adminRequired, (req, res) => {
+  const db = readDB();
+  db.users = db.users.filter(u => !(u.id === req.body.userId || u.email === normEmail(req.body.email)));
+  writeDB(db);
+  res.json({ success: true });
+});
+
+app.post("/admin/plans/save", adminRequired, (req, res) => {
+  const db = readDB();
+  const p = req.body.plan || {};
+  if (!p.id || !p.name) return res.status(400).json({ success: false, error: "Plan id/name required" });
+  const existing = db.plans.find(x => x.id === p.id);
+  if (existing) Object.assign(existing, p);
+  else db.plans.push({ id: p.id, name: p.name, days: Number(p.days || 30), price: Number(p.price || 0), active: p.active !== false });
+  writeDB(db);
+  res.json({ success: true, plans: db.plans });
+});
+
+// Protect paid tool routes with active subscription
+app.use(["/generate", "/generate-from-form", "/generate-from-text", "/shipping-optimize"], authRequired);
 
 app.post("/generate", upload.single("image"), async (req, res) => {
   try {
-    if (!req.file) {
-      return res.json({
-        success: false,
-        error: "No image uploaded"
+    if (!req.file) return res.status(400).json({ success: false, error: "No image uploaded" });
+    let result = "Women's fashion product. Generate a Meesho-ready title, color, fabric, SKU, price, GST, HSN, weight, packaging size and SEO description.";
+    if (openai) {
+      const base64 = req.file.buffer.toString("base64");
+      const response = await openai.chat.completions.create({
+        model: "gpt-4o-mini",
+        messages: [{
+          role: "user",
+          content: [
+            { type: "text", text: "Analyze this product image for a Meesho seller. Return concise product details: category, color, fabric, style, title, description, suggested price, weight and dimensions." },
+            { type: "image_url", image_url: { url: `data:${req.file.mimetype};base64,${base64}` } }
+          ]
+        }],
+        max_tokens: 700
       });
+      result = response.choices?.[0]?.message?.content || result;
     }
-
-    return res.json({
-      success: true,
-      result:
-        "Premium women's fashion product by Dyana Core. Generate a Meesho-ready listing with product name, description, color, fabric, price, MRP, GST, HSN, weight, inventory and package details."
-    });
-  } catch (err) {
-    return res.status(500).json({
-      success: false,
-      error: err.message
-    });
+    res.json({ success: true, result });
+  } catch (e) {
+    res.json({ success: true, result: "Dyana Core fashion product. Premium quality, stylish, comfortable and suitable for casual/festive wear." });
   }
 });
 
 app.post("/generate-from-form", (req, res) => {
-  try {
-    const { description } = req.body;
-
-    return res.json({
-      success: true,
-      fields: generateFields(description)
-    });
-  } catch (err) {
-    return res.status(500).json({
-      success: false,
-      error: err.message
-    });
-  }
+  try { res.json({ success: true, fields: buildFields(req.body.description || "", req.body.formFields || []) }); }
+  catch (e) { res.status(500).json({ success: false, error: e.message }); }
 });
 
 app.post("/generate-from-text", (req, res) => {
-  try {
-    const { description } = req.body;
-
-    return res.json({
-      success: true,
-      fields: generateFields(description)
-    });
-  } catch (err) {
-    return res.status(500).json({
-      success: false,
-      error: err.message
-    });
-  }
+  try { res.json({ success: true, fields: buildFields(req.body.description || "", req.body.formFields || []) }); }
+  catch (e) { res.status(500).json({ success: false, error: e.message }); }
 });
 
-/* ================= EXTRA TOOL APIs ================= */
-
-app.post("/shipping/optimize", (req, res) => {
-  const { category, weight } = req.body;
-  const w = Number(weight || 500);
-
-  return res.json({
-    success: true,
-    category: category || "fashion",
-    suggestedWeight: Math.max(250, Math.min(w, 900)),
-    length: 28,
-    breadth: 22,
-    height: 4,
-    slab: Math.max(250, Math.min(w, 900)) <= 500 ? "Low" : "Medium",
-    note: "Use actual packed weight and dimensions. Do not underreport package details."
-  });
+app.post("/shipping-optimize", (req, res) => {
+  const type = String(req.body.productType || "fashion").toLowerCase();
+  const map = {
+    saree: { weight: 550, length: 28, breadth: 24, height: 5 },
+    kurti: { weight: 320, length: 28, breadth: 22, height: 4 },
+    dress: { weight: 420, length: 30, breadth: 24, height: 5 },
+    footwear: { weight: 750, length: 32, breadth: 20, height: 11 },
+    bag: { weight: 650, length: 34, breadth: 25, height: 9 },
+    innerwear: { weight: 180, length: 22, breadth: 18, height: 3 }
+  };
+  const s = map[type] || { weight: 450, length: 28, breadth: 22, height: 5 };
+  res.json({ success: true, suggestion: s, warning: "Use actual packed product measurement. Wrong weight/dimension can cause penalty." });
 });
 
-app.post("/image/optimize", upload.single("image"), (req, res) => {
-  if (!req.file) {
-    return res.json({
-      success: false,
-      error: "No image uploaded"
-    });
-  }
-
-  return res.json({
-    success: true,
-    message:
-      "Image optimizer route active. For real background removal/resize/compression, connect Sharp or Cloudinary.",
-    output: null
-  });
-});
-
-/* ================= HELPERS ================= */
-
-function generateFields(description = "") {
+function buildFields(description) {
   const price = extractPrice(description) || "299";
-
+  const title = makeTitle(description);
   return [
-    { key: "product_name", label: "Product Name", value: makeTitle(description) },
-    { key: "description", label: "Description", value: makeDescription(description) },
-    { key: "brand", label: "Brand", value: "Dyana Core" },
-    { key: "color", label: "Color", value: extractColor(description) },
-    { key: "meesho_price", label: "Meesho Price", value: price },
-    { key: "product_mrp", label: "MRP", value: String(Number(price) + 300) },
-    { key: "inventory", label: "Inventory", value: "100" },
-    { key: "supplier_gst_percent", label: "GST", value: "5" },
-    { key: "hsn_code", label: "HSN", value: "6204" },
-    { key: "product_weight_in_gms", label: "Weight", value: "500" },
-    { key: "country_of_origin", label: "Country", value: "India" },
-    { key: "manufacturer_name", label: "Manufacturer", value: "Dyana Core" },
-    { key: "manufacturer_address", label: "Manufacturer Address", value: "India" },
-    { key: "manufacturer_pincode", label: "Manufacturer Pincode", value: "247776" },
-    { key: "packer_name", label: "Packer", value: "Dyana Core" },
-    { key: "packer_address", label: "Packer Address", value: "India" },
-    { key: "packer_pincode", label: "Packer Pincode", value: "247776" }
+    f("product_name", title),
+    f("description", makeDescription(description)),
+    f("brand", "Dyana Core"),
+    f("color", extractColor(description)),
+    f("meesho_price", price),
+    f("product_mrp", String(Number(price) + 300)),
+    f("inventory", "100"),
+    f("supplier_gst_percent", "5"),
+    f("hsn_code", "6204"),
+    f("product_weight_in_gms", suggestWeight(description)),
+    f("country_of_origin", "India"),
+    f("manufacturer_name", "Dyana Core"),
+    f("packer_name", "Dyana Core"),
+    f("packaging_length", "28"),
+    f("packaging_breadth", "22"),
+    f("packaging_height", "4"),
+    f("packaging_unit", "cm")
   ];
 }
-
+function f(key, value) { return { key, label: key, value: value || "" }; }
 function makeTitle(text = "") {
-  const clean = String(text).replace(/\s+/g, " ").trim();
-
-  if (!clean) {
-    return "Dyana Core Women's Fashion Product";
-  }
-
-  return clean
-    .replace(/meesho price.*$/i, "")
-    .split(".")[0]
-    .slice(0, 80)
-    .trim() || "Dyana Core Women's Fashion Product";
+  const clean = String(text).replace(/\s+/g, " ").replace(/Meesho price.*$/i, "").trim();
+  return (clean.split(".")[0].slice(0, 75).trim()) || "Dyana Core Women's Fashion Product";
 }
-
 function makeDescription(text = "") {
-  const clean = String(text).replace(/\s+/g, " ").trim();
-
-  return (
-    clean ||
-    "Premium women's fashion product by Dyana Core. Stylish, comfortable and suitable for daily wear, festive wear and casual occasions."
-  );
+  return String(text || "").replace(/\s+/g, " ").trim() || "Premium women's fashion product by Dyana Core. Comfortable, stylish and suitable for daily wear, festive wear and casual occasions.";
 }
-
 function extractPrice(text = "") {
-  const match = String(text).match(/₹\s?(\d+)|price[:\s₹]*(\d+)/i);
-  return match ? String(match[1] || match[2]) : "";
+  const m = String(text).match(/₹\s?(\d+)|price[:\s₹]*(\d+)/i);
+  return m ? String(m[1] || m[2]) : "";
 }
-
 function extractColor(text = "") {
-  const colors = [
-    "red",
-    "blue",
-    "black",
-    "white",
-    "pink",
-    "green",
-    "yellow",
-    "grey",
-    "gray",
-    "purple",
-    "maroon",
-    "orange",
-    "beige",
-    "brown"
-  ];
-
+  const colors = ["red","blue","black","white","pink","green","yellow","grey","gray","purple","maroon","orange","beige","brown","sky blue","dark blue"];
   const lower = String(text).toLowerCase();
   const found = colors.find(c => lower.includes(c));
-
-  return found ? found.charAt(0).toUpperCase() + found.slice(1) : "";
+  return found ? found.replace(/\b\w/g, ch => ch.toUpperCase()) : "";
+}
+function suggestWeight(text = "") {
+  const lower = String(text).toLowerCase();
+  if (lower.includes("saree")) return "550";
+  if (lower.includes("kurti")) return "320";
+  if (lower.includes("dress")) return "420";
+  if (lower.includes("footwear") || lower.includes("shoe") || lower.includes("sandal")) return "750";
+  if (lower.includes("bag")) return "650";
+  if (lower.includes("innerwear")) return "180";
+  return "450";
 }
 
-app.listen(PORT, () => {
-  console.log(`Dyana Core Seller Suite Backend running on port ${PORT}`);
-});
+app.listen(PORT, () => console.log(`Dyana Core Seller Suite Backend running on port ${PORT}`));
