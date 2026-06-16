@@ -1,0 +1,610 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title> Meesho AUTO Listing WITH AI </title>
+  <meta charset="UTF-8" />
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Verdana', Arial, sans-serif;
+      width: 380px;
+      background: #48e8fa;
+      color: #000;
+    }
+
+    /* Auth Screen */
+    #auth-screen {
+      display: none;
+      padding: 20px;
+      text-align: center;
+      background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+      min-height: 450px;
+    }
+    
+    #auth-screen .logo {
+      margin-bottom: 20px;
+    }
+    
+    #auth-screen .logo h1 {
+      font-size: 24px;
+      font-weight: 900;
+      color: #48e8fa;
+      text-transform: uppercase;
+      margin-bottom: 5px;
+    }
+    
+    #auth-screen .logo p {
+      font-size: 10px;
+      color: #aaa;
+      text-transform: uppercase;
+      letter-spacing: 2px;
+    }
+    
+    #auth-screen .auth-box {
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 215, 0, 0.3);
+      border-radius: 10px;
+      padding: 20px;
+    }
+    
+    #auth-screen h2 {
+      font-size: 14px;
+      color: #48e8fa;
+      margin-bottom: 15px;
+      text-transform: uppercase;
+    }
+    
+    #auth-screen input {
+      width: 100%;
+      padding: 10px;
+      font-size: 13px;
+      border: 2px solid #333;
+      border-radius: 6px;
+      background: rgba(0, 0, 0, 0.3);
+      color: #fff;
+      margin-bottom: 12px;
+    }
+    
+    #auth-screen input::placeholder {
+      color: #666;
+    }
+    
+    #auth-screen .btn {
+      width: 100%;
+      padding: 12px;
+      font-size: 12px;
+      font-weight: 800;
+      text-transform: uppercase;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      background: linear-gradient(135deg, #FFD700 0%, #FFA500 100%);
+      color: #000;
+    }
+    
+    #auth-screen .status {
+      padding: 10px;
+      border-radius: 6px;
+      font-size: 11px;
+      margin-bottom: 12px;
+      display: none;
+    }
+    
+    #auth-screen .status.error {
+      background: rgba(255, 0, 0, 0.2);
+      border: 1px solid #ff4444;
+      color: #ff4444;
+      display: block;
+    }
+    
+    #auth-screen .status.success {
+      background: rgba(0, 255, 0, 0.2);
+      border: 1px solid #44ff44;
+      color: #44ff44;
+      display: block;
+    }
+    
+    #auth-screen .help-text {
+      font-size: 10px;
+      color: #666;
+      margin-top: 15px;
+      line-height: 1.5;
+    }
+    
+    #auth-screen footer {
+      font-size: 9px;
+      color: #555;
+      margin-top: 20px;
+    }
+    
+    #auth-screen .spinner {
+      display: inline-block;
+      width: 12px;
+      height: 12px;
+      border: 2px solid #000;
+      border-top-color: transparent;
+      border-radius: 50%;
+      animation: spin 0.6s linear infinite;
+      vertical-align: middle;
+      margin-right: 6px;
+    }
+    
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* Main Content */
+    #main-content {
+      display: none;
+    }
+
+    /* Header */
+    .header {
+      background: #fff;
+      border-bottom: 3px solid #000;
+      padding: 10px 14px;
+      text-align: center;
+      box-shadow: 0 3px 0 #000;
+    }
+    .header h1 {
+      font-size: 15px;
+      font-weight: 900;
+      text-transform: uppercase;
+      letter-spacing: -0.5px;
+    }
+    .header p {
+      font-size: 9px;
+      font-weight: 700;
+      background: #000;
+      color: #FFD700;
+      display: inline-block;
+      padding: 1px 6px;
+      margin-top: 3px;
+    }
+    
+    .header .license-badge {
+      display: block;
+      font-size: 9px;
+      color: #00aa00;
+      margin-top: 5px;
+      font-weight: 700;
+    }
+    
+.header .logout-link {
+      font-size: 9px;
+      color: #ff4444;
+      cursor: pointer;
+      text-decoration: underline;
+      margin-left: 10px;
+    }
+    
+    .header .admin-link {
+      font-size: 9px;
+      color: #48e8fa;
+      cursor: pointer;
+      text-decoration: underline;
+      margin-left: 10px;
+    }
+
+    /* Tab Switcher */
+    .tabs {
+      display: flex;
+      border-bottom: 3px solid #000;
+    }
+    .tab-btn {
+      flex: 1;
+      padding: 9px 6px;
+      font-size: 11px;
+      font-weight: 800;
+      text-transform: uppercase;
+      border: none;
+      border-right: 2px solid #000;
+      background: #ff48e4;
+      color: #000;
+      cursor: pointer;
+      transition: background 0.1s;
+    }
+    .tab-btn:last-child { border-right: none; }
+    .tab-btn.active {
+      background: #fff;
+      border-bottom: 3px solid #fff;
+      margin-bottom: -3px;
+    }
+    .tab-btn:hover:not(.active) { background: #f5c800; }
+
+    /* Tab Panels */
+    .tab-panel { display: none; padding: 12px; }
+    .tab-panel.active { display: block; }
+
+    /* Form Elements */
+    label {
+      display: block;
+      font-size: 10px;
+      font-weight: 800;
+      text-transform: uppercase;
+      margin-bottom: 4px;
+    }
+
+    input[type="file"] {
+      width: 100%;
+      font-size: 11px;
+      margin-bottom: 10px;
+      padding: 4px;
+      border: 2px solid #000;
+      background: #fff;
+    }
+
+    textarea {
+      width: 100%;
+      height: 90px;
+      padding: 8px;
+      border: 3px solid #000;
+      font-size: 12px;
+      font-family: 'Verdana', Arial, sans-serif;
+      resize: vertical;
+      background: #fff;
+      margin-bottom: 8px;
+      box-shadow: 2px 2px 0 #000;
+    }
+    textarea:focus { outline: none; border-color: #000; box-shadow: 3px 3px 0 #000; }
+
+    /* Step boxes */
+    .step-box {
+      background: #fff;
+      border: 2px solid #000;
+      box-shadow: 2px 2px 0 #000;
+      padding: 10px;
+      margin-bottom: 10px;
+    }
+    .step-label {
+      font-size: 9px;
+      font-weight: 900;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      background: #000;
+      color: #48e8fa;
+      display: inline-block;
+      padding: 2px 8px;
+      margin-bottom: 8px;
+    }
+
+    /* Buttons */
+    .btn {
+      width: 100%;
+      padding: 10px;
+      font-size: 12px;
+      font-weight: 800;
+      font-family: 'Verdana', Arial, sans-serif;
+      text-transform: uppercase;
+      border: 3px solid #000;
+      cursor: pointer;
+      transition: all 0.1s;
+      box-shadow: 2px 2px 0 #000;
+      margin-bottom: 8px;
+    }
+    .btn:hover  { transform: translate(-1px,-1px); box-shadow: 3px 3px 0 #000; }
+    .btn:active { transform: translate(1px,1px);   box-shadow: 0 0 0 #000; }
+    .btn:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
+
+    .btn-black  { background: #000; color: #FFD700; }
+    .btn-white  { background: #fff; color: #000; }
+    .btn-green  { background: #00cc55; color: #fff; border-color: #000; }
+    .btn-red    { background: #ff4444; color: #fff; border-color: #000; }
+
+    /* Result Box */
+    .result-box {
+      background: #fff;
+      border: 3px solid #000;
+      padding: 10px;
+      font-size: 11px;
+      white-space: pre-wrap;
+      max-height: 180px;
+      overflow-y: auto;
+      box-shadow: 2px 2px 0 #000;
+      margin-bottom: 10px;
+      color: #333;
+      font-family: monospace;
+    }
+
+    /* Generated Fields Panel */
+    #fields-panel {
+      display: none;
+      background: #fff;
+      border: 3px solid #000;
+      box-shadow: 2px 2px 0 #000;
+      margin-bottom: 10px;
+    }
+    #fields-panel .panel-header {
+      background: #000;
+      color: #48e8fa;
+      font-size: 10px;
+      font-weight: 800;
+      text-transform: uppercase;
+      padding: 6px 10px;
+      letter-spacing: 1px;
+    }
+    .field-row {
+      display: flex;
+      align-items: center;
+      border-bottom: 1px solid #eee;
+      padding: 5px 8px;
+      gap: 6px;
+    }
+    .field-row:last-child { border-bottom: none; }
+    .field-label {
+      font-size: 9px;
+      font-weight: 800;
+      text-transform: uppercase;
+      color: #555;
+      width: 110px;
+      flex-shrink: 0;
+    }
+    .field-value {
+      flex: 1;
+      font-size: 11px;
+      padding: 3px 6px;
+      border: 1px solid #ccc;
+      font-family: 'Verdana', Arial, sans-serif;
+      background: #fafafa;
+    }
+    .field-value:focus { outline: none; border-color: #000; background: #fff; }
+
+    /* Status */
+    .status {
+      font-size: 11px;
+      font-weight: 700;
+      padding: 7px 10px;
+      border: 2px solid transparent;
+      margin-bottom: 8px;
+      display: none;
+    }
+    .status.error   { background: #ffe6e6; color: #c62828; border-color: #c62828; display: block; }
+    .status.success { background: #e8f5e9; color: #2e7d32; border-color: #2e7d32; display: block; }
+    .status.info    { background: #e3f2fd; color: #1565c0; border-color: #1565c0; display: block; }
+
+    /* Scan badge */
+    .scan-badge {
+      display: inline-block;
+      font-size: 10px;
+      font-weight: 800;
+      padding: 3px 8px;
+      border: 2px solid #000;
+      margin-top: 6px;
+    }
+    .scan-badge.found  { background: #e8f5e9; color: #2e7d32; }
+    .scan-badge.none   { background: #fff3e0; color: #e65100; }
+
+    /* Spinner */
+    .spinner {
+      display: inline-block;
+      width: 12px; height: 12px;
+      border: 2px solid #fff;
+      border-top-color: transparent;
+      border-radius: 50%;
+      animation: spin 0.6s linear infinite;
+      vertical-align: middle;
+      margin-right: 6px;
+    }
+    .spinner-dark {
+      border-color: #000;
+      border-top-color: transparent;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    footer {
+      text-align: center;
+      font-size: 9px;
+      font-weight: 700;
+      padding: 6px;
+      background: #000;
+      color: #FFD700;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Auth Screen -->
+  <div id="auth-screen">
+    <div class="logo">
+      <h1>⚡ Meesho AI</h1>
+      <p>Auto-Generate & Autofill</p>
+    </div>
+    
+    <div class="auth-box">
+      <h2>🔐 Enter License Key</h2>
+      <div class="status" id="auth-status"></div>
+      <input type="text" id="authLicenseKey" placeholder="MEESHO-XXXXX-XXXXX-XXXXX" />
+      <button class="btn" id="authLoginBtn">Activate Extension</button>
+    </div>
+    
+    <p class="help-text">
+      Get your license key from the admin.<br>
+      Contact on WhatsApp to purchase or renew.
+    </p>
+    
+    <footer>© 2024 Meesho AI Tool | Version 1.1</footer>
+  </div>
+
+  <!-- Main Content -->
+  <div id="main-content">
+    <!-- Header -->
+    <div class="header">
+      <h1>⚡ MEESHO LISTING WITh AI </h1>
+      <p>AUTO-GENERATE &amp; AUTOFILL PRODUCT LISTINGS</p>
+      <span class="license-badge" id="license-badge">✓ Active</span>
+<span class="logout-link" id="logoutBtn">Logout</span>
+      <span class="admin-link" id="adminBtn">Admin</span>
+    </div>
+
+    <!-- Tab Switcher -->
+    <div class="tabs">
+      <button class="tab-btn active" data-tab="tab-image">📷 Image</button>
+      <button class="tab-btn" data-tab="tab-text">✍️ Text</button>
+      <button class="tab-btn" data-tab="tab-defaults">📝 Defaults</button>
+      <button class="tab-btn" data-tab="tab-capture">🎯 Capture</button>
+      <button class="tab-btn" data-tab="tab-settings">⚙️ Settings</button>
+    </div>
+
+    <!-- ===== TAB 1: IMAGE ===== -->
+    <div class="tab-panel active" id="tab-image">
+      <div class="step-box">
+        <div class="step-label">Quick AutoFill (One Click)</div>
+        <button class="btn btn-green" id="quickImgAutofillBtn" style="margin-bottom:6px;">
+          ⚡ Quick Scan & AutoFill
+        </button>
+        <p style="font-size:9px;color:#555;margin-bottom:8px;">
+          Scans form and fills all fields automatically using defaults + AI
+        </p>
+      </div>
+
+      <div class="step-box">
+        <div class="step-label">Step 1 — Scan Form (Optional)</div>
+        <button class="btn btn-white" id="imgScanFormBtn" style="margin-bottom:6px;">
+          📋 Scan Meesho Form Fields
+        </button>
+        <div id="img-scan-badge" class="scan-badge none">⚠ Scan form for smart autofill</div>
+      </div>
+
+      <div class="step-box">
+        <div class="step-label">Step 2 — Upload Image</div>
+        <input type="file" id="aiImage" accept="image/*" />
+        <div style="margin-top:6px;">
+          <label for="imgMeeshoPrice" style="margin-bottom:4px;">Meesho Price (₹) — Optional Override</label>
+          <input type="number" id="imgMeeshoPrice" placeholder="e.g. 299" min="1"
+            style="width:100%;padding:6px 8px;border:2px solid #000;font-size:13px;font-weight:700;background:#fff;box-shadow:2px 2px 0 #000;" />
+        </div>
+      </div>
+
+      <button class="btn btn-black" id="generateFromImage">✨ Analyze Image &amp; Generate</button>
+      <div class="status" id="image-status"></div>
+      <div class="result-box" id="image-result" style="display:none;"></div>
+
+      <button class="btn btn-green" id="imgAutofillBtn" style="display:none;">
+        🚀 Autofill on Meesho Tab
+      </button>
+    </div>
+
+    <!-- ===== TAB 2: TEXT DESCRIPTION ===== -->
+    <div class="tab-panel" id="tab-text">
+      <div class="step-box">
+        <div class="step-label">Step 1 — Scan Form</div>
+        <button class="btn btn-white" id="scanFormBtn" style="margin-bottom:6px;">
+          📋 Scan Meesho Form Fields
+        </button>
+        <div id="scan-badge" class="scan-badge none">⚠ Not scanned yet — open Meesho listing page first</div>
+      </div>
+
+      <div class="step-box">
+        <div class="step-label">Step 2 — Describe Product</div>
+        <textarea
+          id="productDescription"
+          placeholder="e.g. Red cotton kurti for women, size M-XL, price ₹399, GST 5%, weight 300g, floral print, festive wear..."
+        ></textarea>
+        <label for="txtMeeshoPrice" style="margin-top:4px;">Meesho Price (₹) — Optional Override</label>
+        <input type="number" id="txtMeeshoPrice" placeholder="e.g. 299 (leave blank to let AI decide)" min="1"
+          style="width:100%;padding:6px 8px;border:2px solid #000;font-size:13px;font-weight:700;background:#fff;box-shadow:2px 2px 0 #000;margin-top:4px;" />
+      </div>
+
+      <button class="btn btn-black" id="generateFromText">
+        ✨ Generate &amp; Autofill
+      </button>
+
+      <div class="status" id="text-status"></div>
+
+      <div id="fields-panel">
+        <div class="panel-header">📋 Generated Fields — Edit if needed, then Autofill</div>
+        <div id="fields-list"></div>
+      </div>
+
+      <button class="btn btn-green" id="autofillBtn" style="display:none;">
+        🚀 Autofill on Meesho Tab
+      </button>
+
+      <button class="btn btn-white" id="saveProfileBtn" style="display:none;">
+        💾 Save as Profile
+      </button>
+    </div>
+
+    <!-- ===== TAB 3: DEFAULTS ===== -->
+    <div class="tab-panel" id="tab-defaults">
+      <div class="step-box">
+        <div class="step-label">Save Default Values</div>
+        <p style="font-size:10px;font-weight:700;margin-bottom:8px;color:#555;">
+          Set default values that will be used for every listing. These values will override AI-generated values.
+        </p>
+        <div id="defaults-list"></div>
+        <button class="btn btn-black" id="addFieldBtn" style="margin-top:8px;margin-bottom:5px;">➕ Add Custom Field</button>
+        <div style="display:flex;gap:5px;">
+          <button class="btn btn-green" id="saveDefaultsBtn" style="flex:1;">💾 Save Defaults</button>
+          <button class="btn btn-red" id="clearDefaultsBtn" style="flex:1;">🗑️ Clear All</button>
+        </div>
+        <div class="status" id="defaults-status"></div>
+      </div>
+    </div>
+
+    <!-- ===== TAB 4: CAPTURE ===== -->
+    <div class="tab-panel" id="tab-capture">
+      <div class="step-box">
+        <div class="step-label">Capture Profile Fields</div>
+        <p style="font-size:10px;font-weight:700;margin-bottom:8px;color:#555;">
+          Open Meesho listing page, enter capture file name, start capture, then save captured file as JSON.
+        </p>
+        <label for="captureFileName" style="margin-bottom:4px;">Capture File Name</label>
+        <input type="text" id="captureFileName" placeholder="e.g. kurti_profile_march"
+          style="width:100%;padding:7px 8px;border:2px solid #000;font-size:12px;font-weight:700;background:#fff;box-shadow:2px 2px 0 #000;margin-bottom:8px;" />
+        <div style="display:flex;gap:6px;">
+          <button class="btn btn-black" id="startCaptureBtn" style="flex:1;">🎯 Start Capture</button>
+          <button class="btn btn-red" id="stopCaptureBtn" style="flex:1;">⛔ Stop Capture</button>
+        </div>
+
+        <label for="captureProfileSelect" style="margin-bottom:4px;">Select Captured File/Profile</label>
+        <select id="captureProfileSelect"
+          style="width:100%;padding:7px 8px;border:2px solid #000;font-size:12px;font-weight:700;background:#fff;box-shadow:2px 2px 0 #000;margin-bottom:8px;">
+          <option value="">-- Select Capture Profile --</option>
+        </select>
+        <button class="btn btn-green" id="autofillCaptureBtn">🚀 Autofill Selected File</button>
+        <div class="status" id="capture-status"></div>
+      </div>
+
+      <div class="step-box">
+        <div class="step-label">Import / Export Data</div>
+        <p style="font-size:10px;font-weight:700;margin-bottom:8px;color:#555;">
+          Export and import extension data (defaults + saved profiles) as JSON backup.
+        </p>
+        <button class="btn btn-green" id="exportDataBtn">⬇️ Export JSON</button>
+        <input type="file" id="importDataFile" accept="application/json" style="margin-top:6px;" />
+        <button class="btn btn-white" id="importDataBtn">⬆️ Import JSON</button>
+        <div class="status" id="data-status"></div>
+      </div>
+    </div>
+
+    <!-- ===== TAB 5: SETTINGS ===== -->
+    <div class="tab-panel" id="tab-settings">
+      <div class="step-box">
+        <div class="step-label">Server URL</div>
+        <p style="font-size:10px;font-weight:700;margin-bottom:8px;color:#555;">
+          Enter the URL of your AI backend server. Use <code>http://localhost:5001</code> if running locally, or your remote server URL if hosted online.
+        </p>
+        <input type="text" id="serverUrlInput" placeholder="http://localhost:5001"
+          style="width:100%;padding:7px 8px;border:2px solid #000;font-size:12px;font-weight:700;background:#fff;box-shadow:2px 2px 0 #000;margin-bottom:8px;" />
+        <button class="btn btn-black" id="saveServerUrlBtn">💾 Save Server URL</button>
+        <div class="status" id="settings-status"></div>
+      </div>
+      <div class="step-box">
+        <div class="step-label">How to run the server</div>
+        <p style="font-size:10px;font-weight:700;line-height:1.6;color:#333;">
+          1. Install Node.js on your PC<br>
+          2. Copy the extension folder to your PC<br>
+          3. Run: <code style="background:#000;color:#FFD700;padding:1px 4px;">npm install</code><br>
+          4. Run: <code style="background:#000;color:#FFD700;padding:1px 4px;">node server.js</code><br>
+          5. Set server URL above to <code>http://localhost:5001</code>
+        </p>
+      </div>
+    </div>
+
+    <footer>MEESHO AI TOOL v1.1 — Groow with Mohit Hindoniya</footer>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>
+
