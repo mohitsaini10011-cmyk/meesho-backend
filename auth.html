@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Meesho AI - Login</title>
+  <meta charset="UTF-8" />
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    
+    body {
+      font-family: 'Segoe UI', Verdana, Arial, sans-serif;
+      width: 380px;
+      min-height: 400px;
+      background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+      color: #fff;
+      padding: 20px;
+    }
+    
+    .logo {
+      text-align: center;
+      margin-bottom: 30px;
+    }
+    
+    .logo h1 {
+      font-size: 28px;
+      font-weight: 900;
+      color: #FFD700;
+      text-transform: uppercase;
+      letter-spacing: 2px;
+      margin-bottom: 8px;
+    }
+    
+    .logo p {
+      font-size: 12px;
+      color: #aaa;
+      text-transform: uppercase;
+      letter-spacing: 3px;
+    }
+    
+    .login-box {
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 215, 0, 0.3);
+      border-radius: 12px;
+      padding: 25px;
+      margin-bottom: 20px;
+    }
+    
+    .login-box h2 {
+      font-size: 16px;
+      font-weight: 600;
+      margin-bottom: 20px;
+      color: #FFD700;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+    
+    label {
+      display: block;
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      margin-bottom: 8px;
+      color: #ccc;
+      letter-spacing: 1px;
+    }
+    
+    input[type="text"],
+    input[type="password"] {
+      width: 100%;
+      padding: 12px 15px;
+      font-size: 14px;
+      border: 2px solid #333;
+      border-radius: 8px;
+      background: rgba(0, 0, 0, 0.3);
+      color: #fff;
+      margin-bottom: 15px;
+      transition: all 0.3s;
+    }
+    
+    input:focus {
+      outline: none;
+      border-color: #FFD700;
+      box-shadow: 0 0 10px rgba(255, 215, 0, 0.2);
+    }
+    
+    input::placeholder {
+      color: #666;
+    }
+    
+    .btn {
+      width: 100%;
+      padding: 14px;
+      font-size: 14px;
+      font-weight: 800;
+      text-transform: uppercase;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: all 0.2s;
+      letter-spacing: 1px;
+    }
+    
+    .btn-primary {
+      background: linear-gradient(135deg, #FFD700 0%, #FFA500 100%);
+      color: #000;
+    }
+    
+    .btn-primary:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 5px 20px rgba(255, 215, 0, 0.4);
+    }
+    
+    .btn-primary:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+      transform: none;
+    }
+    
+    .status {
+      padding: 12px;
+      border-radius: 8px;
+      font-size: 12px;
+      font-weight: 600;
+      margin-bottom: 15px;
+      display: none;
+    }
+    
+    .status.error {
+      background: rgba(255, 0, 0, 0.2);
+      border: 1px solid #ff4444;
+      color: #ff4444;
+      display: block;
+    }
+    
+    .status.success {
+      background: rgba(0, 255, 0, 0.2);
+      border: 1px solid #44ff44;
+      color: #44ff44;
+      display: block;
+    }
+    
+    .status.info {
+      background: rgba(255, 215, 0, 0.2);
+      border: 1px solid #FFD700;
+      color: #FFD700;
+      display: block;
+    }
+    
+    .divider {
+      text-align: center;
+      margin: 20px 0;
+      position: relative;
+    }
+    
+    .divider::before {
+      content: '';
+      position: absolute;
+      left: 0;
+      top: 50%;
+      width: 100%;
+      height: 1px;
+      background: #333;
+    }
+    
+    .divider span {
+      background: rgba(26, 26, 46, 0.8);
+      padding: 0 15px;
+      font-size: 11px;
+      color: #666;
+      text-transform: uppercase;
+      position: relative;
+    }
+    
+    .help-text {
+      font-size: 11px;
+      color: #666;
+      text-align: center;
+      line-height: 1.6;
+      margin-top: 20px;
+    }
+    
+    .help-text a {
+      color: #FFD700;
+      text-decoration: none;
+    }
+    
+    footer {
+      text-align: center;
+      font-size: 10px;
+      color: #555;
+      margin-top: 30px;
+    }
+    
+    .spinner {
+      display: inline-block;
+      width: 14px;
+      height: 14px;
+      border: 2px solid #000;
+      border-top-color: transparent;
+      border-radius: 50%;
+      animation: spin 0.6s linear infinite;
+      vertical-align: middle;
+      margin-right: 8px;
+    }
+    
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+  </style>
+</head>
+<body>
+
+  <div class="logo">
+    <h1>⚡ Meesho AI</h1>
+    <p>Auto-Generate & Autofill</p>
+  </div>
+  
+  <div class="login-box">
+    <h2>🔐 Enter License Key</h2>
+    
+    <div class="status" id="status"></div>
+    
+    <label for="licenseKey">Your License Key</label>
+    <input type="text" id="licenseKey" placeholder="MEESHO-XXXXX-XXXXX-XXXXX" />
+    
+    <button class="btn btn-primary" id="loginBtn">
+      Activate Extension
+    </button>
+  </div>
+  
+  <div class="divider">
+    <span>How it works</span>
+  </div>
+  
+  <p class="help-text">
+    Get your license key from the admin.<br>
+    Contact on WhatsApp to purchase or renew.
+  </p>
+  
+  <footer>
+    © 2024 Meesho AI Tool | Version 1.1
+  </footer>
+  
+  <script src="auth.js"></script>
+</body>
+</html>
+

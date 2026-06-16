@@ -4,7 +4,7 @@
  */
 
 // ─── Configuration ────────────────────────────────────────────────────────────
-let SERVER_URL = 'https://dyanacore-creator-api.onrender.com';
+let SERVER_URL = 'https://meesho-backend-ga8x.onrender.com';
 
 // Storage keys
 const STORAGE_KEYS = {

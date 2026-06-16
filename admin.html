@@ -1,0 +1,676 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Meesho AI - Admin Dashboard</title>
+  <meta charset="UTF-8" />
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    
+    body {
+      font-family: 'Segoe UI', Verdana, Arial, sans-serif;
+      width: 450px;
+      min-height: 550px;
+      background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+      color: #fff;
+      padding: 20px;
+    }
+    
+    .logo {
+      text-align: center;
+      margin-bottom: 25px;
+    }
+    
+    .logo h1 {
+      font-size: 24px;
+      font-weight: 900;
+      color: #FFD700;
+      text-transform: uppercase;
+    }
+    
+    .logo p {
+      font-size: 11px;
+      color: #aaa;
+      text-transform: uppercase;
+      letter-spacing: 2px;
+      margin-top: 5px;
+    }
+    
+    /* Login Form */
+    #login-panel {
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 215, 0, 0.3);
+      border-radius: 12px;
+      padding: 25px;
+    }
+    
+    #login-panel h2 {
+      font-size: 16px;
+      font-weight: 600;
+      margin-bottom: 20px;
+      color: #FFD700;
+      text-transform: uppercase;
+    }
+    
+    label {
+      display: block;
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      margin-bottom: 8px;
+      color: #ccc;
+    }
+    
+    input[type="text"],
+    input[type="password"],
+    input[type="number"] {
+      width: 100%;
+      padding: 12px 15px;
+      font-size: 14px;
+      border: 2px solid #333;
+      border-radius: 8px;
+      background: rgba(0, 0, 0, 0.3);
+      color: #fff;
+      margin-bottom: 15px;
+    }
+    
+    input:focus {
+      outline: none;
+      border-color: #FFD700;
+    }
+    
+    input::placeholder {
+      color: #666;
+    }
+    
+    select {
+      width: 100%;
+      padding: 12px 15px;
+      font-size: 14px;
+      border: 2px solid #333;
+      border-radius: 8px;
+      background: rgba(0, 0, 0, 0.3);
+      color: #fff;
+      margin-bottom: 15px;
+    }
+    
+    .btn {
+      width: 100%;
+      padding: 14px;
+      font-size: 14px;
+      font-weight: 800;
+      text-transform: uppercase;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    
+    .btn-primary {
+      background: linear-gradient(135deg, #FFD700 0%, #FFA500 100%);
+      color: #000;
+    }
+    
+    .btn-primary:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 5px 20px rgba(255, 215, 0, 0.4);
+    }
+    
+    .btn-danger {
+      background: #ff4444;
+      color: #fff;
+    }
+    
+    .btn-success {
+      background: #00cc55;
+      color: #fff;
+    }
+    
+    .btn:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+    
+    .status {
+      padding: 12px;
+      border-radius: 8px;
+      font-size: 12px;
+      font-weight: 600;
+      margin-bottom: 15px;
+      display: none;
+    }
+    
+    .status.error {
+      background: rgba(255, 0, 0, 0.2);
+      border: 1px solid #ff4444;
+      color: #ff4444;
+      display: block;
+    }
+    
+    .status.success {
+      background: rgba(0, 255, 0, 0.2);
+      border: 1px solid #44ff44;
+      color: #44ff44;
+      display: block;
+    }
+    
+    .status.info {
+      background: rgba(255, 215, 0, 0.2);
+      border: 1px solid #FFD700;
+      color: #FFD700;
+      display: block;
+    }
+    
+    /* Dashboard */
+    #dashboard {
+      display: none;
+    }
+    
+    .dashboard-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 20px;
+    }
+    
+    .dashboard-header h2 {
+      font-size: 18px;
+      color: #FFD700;
+    }
+    
+    .logout-btn {
+      font-size: 11px;
+      color: #ff4444;
+      cursor: pointer;
+      text-decoration: underline;
+    }
+    
+    .stats-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-bottom: 20px;
+    }
+    
+    .stat-card {
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 215, 0, 0.2);
+      border-radius: 8px;
+      padding: 15px;
+      text-align: center;
+    }
+    
+    .stat-card .number {
+      font-size: 28px;
+      font-weight: 900;
+      color: #FFD700;
+    }
+    
+    .stat-card .label {
+      font-size: 10px;
+      color: #aaa;
+      text-transform: uppercase;
+      margin-top: 5px;
+    }
+    
+    .section {
+      background: rgba(255, 255, 255, 0.03);
+      border-radius: 8px;
+      padding: 15px;
+      margin-bottom: 15px;
+    }
+    
+    .section h3 {
+      font-size: 12px;
+      color: #FFD700;
+      text-transform: uppercase;
+      margin-bottom: 15px;
+      letter-spacing: 1px;
+    }
+    
+    .keys-list {
+      max-height: 200px;
+      overflow-y: auto;
+    }
+    
+    .key-item {
+      background: rgba(0, 0, 0, 0.3);
+      border-radius: 6px;
+      padding: 10px;
+      margin-bottom: 8px;
+      font-size: 11px;
+    }
+    
+    .key-item .key-code {
+      font-family: monospace;
+      color: #FFD700;
+      font-size: 12px;
+      margin-bottom: 5px;
+    }
+    
+    .key-item .key-info {
+      color: #888;
+      font-size: 10px;
+    }
+    
+    .key-item .key-info span {
+      margin-right: 10px;
+    }
+    
+    .key-item .key-status {
+      display: inline-block;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 9px;
+      font-weight: 700;
+      text-transform: uppercase;
+    }
+    
+    .key-item .key-status.active {
+      background: rgba(0, 255, 0, 0.2);
+      color: #44ff44;
+    }
+    
+    .key-item .key-status.expired {
+      background: rgba(255, 0, 0, 0.2);
+      color: #ff4444;
+    }
+    
+    .key-item .deactivate-btn {
+      float: right;
+      font-size: 9px;
+      padding: 3px 8px;
+      background: #ff4444;
+      color: #fff;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    
+    .generated-key {
+      background: rgba(255, 215, 0, 0.1);
+      border: 2px dashed #FFD700;
+      border-radius: 8px;
+      padding: 15px;
+      text-align: center;
+      margin-top: 15px;
+      display: none;
+    }
+    
+    .generated-key .key-display {
+      font-family: monospace;
+      font-size: 16px;
+      color: #FFD700;
+      margin: 10px 0;
+      word-break: break-all;
+    }
+    
+    .copy-btn {
+      background: #333;
+      color: #fff;
+      border: none;
+      padding: 5px 15px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 11px;
+    }
+    
+    footer {
+      text-align: center;
+      font-size: 10px;
+      color: #555;
+      margin-top: 20px;
+    }
+    
+    .spinner {
+      display: inline-block;
+      width: 14px;
+      height: 14px;
+      border: 2px solid #000;
+      border-top-color: transparent;
+      border-radius: 50%;
+      animation: spin 0.6s linear infinite;
+      vertical-align: middle;
+      margin-right: 8px;
+    }
+    
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+  </style>
+</head>
+<body>
+
+  <div class="logo">
+    <h1>⚡ Meesho AI</h1>
+    <p>Admin Dashboard</p>
+  </div>
+  
+  <!-- Login Panel -->
+  <div id="login-panel">
+    <h2>🔐 Admin Login</h2>
+    <div class="status" id="status"></div>
+    
+    <label for="username">Username</label>
+    <input type="text" id="username" placeholder="Enter admin username" />
+    
+    <label for="password">Password</label>
+    <input type="password" id="password" placeholder="Enter admin password" />
+    
+    <button class="btn btn-primary" id="loginBtn">Login to Dashboard</button>
+  </div>
+  
+  <!-- Dashboard Panel -->
+  <div id="dashboard">
+    <div class="dashboard-header">
+      <h2>📊 Dashboard</h2>
+      <span class="logout-btn" id="logoutBtn">Logout</span>
+    </div>
+    
+    <!-- Stats -->
+    <div class="stats-grid">
+      <div class="stat-card">
+        <div class="number" id="totalKeys">0</div>
+        <div class="label">Total Keys</div>
+      <div class="stat-card">
+        <div class="number" id="activeKeys">0</div>
+        <div class="label">Active</div>
+    </div>
+    
+    <!-- Generate Key -->
+    <div class="section">
+      <h3>🎫 Generate New License Key</h3>
+      
+      <label for="planType">Plan Type</label>
+      <select id="planType">
+        <option value="monthly">Monthly (30 days)</option>
+        <option value="quarterly">Quarterly (90 days)</option>
+        <option value="yearly">Yearly (365 days)</option>
+        <option value="lifetime">Lifetime (999 days)</option>
+      </select>
+      
+      <button class="btn btn-success" id="generateBtn">Generate Key</button>
+      
+      <div class="generated-key" id="generatedKey">
+        <div style="font-size:11px;color:#aaa;">NEW LICENSE KEY:</div>
+        <div class="key-display" id="newKeyDisplay"></div>
+        <button class="copy-btn" id="copyKeyBtn">Copy Key</button>
+      </div>
+    
+    <!-- All Keys -->
+    <div class="section">
+      <h3>📋 All License Keys</h3>
+      <div class="keys-list" id="keysList">
+        <!-- Keys will be loaded here -->
+      </div>
+    
+    <footer>© 2024 Meesho AI Tool | Admin Panel</footer>
+  </div>
+  
+  <script>
+    // Configuration
+    let SERVER_URL = 'https://web-production-1f057.up.railway.app';
+    let adminToken = null;
+    
+    // DOM Elements
+    const loginPanel = document.getElementById('login-panel');
+    const dashboard = document.getElementById('dashboard');
+    const loginBtn = document.getElementById('loginBtn');
+    const generateBtn = document.getElementById('generateBtn');
+    const logoutBtn = document.getElementById('logoutBtn');
+    const status = document.getElementById('status');
+    
+    // Load saved server URL
+    chrome.storage.sync.get(['serverUrl'], (result) => {
+      if (result.serverUrl) {
+        SERVER_URL = result.serverUrl.replace(/\/$/, '');
+      }
+    });
+    
+    // Login
+    loginBtn.addEventListener('click', handleLogin);
+    
+    // Enter key handlers
+    document.getElementById('username').addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') document.getElementById('password').focus();
+    });
+    document.getElementById('password').addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') handleLogin();
+    });
+    
+    // Generate Key
+    generateBtn.addEventListener('click', generateKey);
+    
+    // Copy Key
+    document.getElementById('copyKeyBtn').addEventListener('click', () => {
+      const key = document.getElementById('newKeyDisplay').textContent;
+      navigator.clipboard.writeText(key);
+      showStatus('Key copied to clipboard!', 'success');
+    });
+    
+    // Logout
+    logoutBtn.addEventListener('click', () => {
+      adminToken = null;
+      loginPanel.style.display = 'block';
+      dashboard.style.display = 'none';
+    });
+    
+    // Handle Login
+    function handleLogin() {
+      const username = document.getElementById('username').value.trim();
+      const password = document.getElementById('password').value;
+      
+      if (!username || !password) {
+        showStatus('Please enter username and password', 'error');
+        return;
+      }
+      
+      setLoading(true, 'Logging in...');
+      
+      // Create basic auth token
+      const credentials = btoa(username + ':' + password);
+      adminToken = 'Basic ' + credentials;
+      
+      // Try to fetch stats to verify credentials
+      fetch(SERVER_URL + '/admin/stats', {
+        headers: {
+          'Authorization': adminToken
+        }
+      })
+      .then(res => {
+        if (res.ok) {
+          return res.json();
+        } else if (res.status === 401) {
+          throw new Error('Invalid username or password');
+        } else {
+          throw new Error('Server error');
+        }
+      })
+      .then(data => {
+        if (data.success) {
+          loginPanel.style.display = 'none';
+          dashboard.style.display = 'block';
+          loadDashboard();
+        } else {
+          throw new Error(data.error || 'Login failed');
+        }
+      })
+      .catch(err => {
+        showStatus(err.message, 'error');
+        adminToken = null;
+      })
+      .finally(() => {
+        setLoading(false);
+      });
+    }
+    
+    // Load Dashboard
+    function loadDashboard() {
+      loadStats();
+      loadKeys();
+    }
+    
+    // Load Stats
+    function loadStats() {
+      fetch(SERVER_URL + '/admin/stats', {
+        headers: {
+          'Authorization': adminToken
+        }
+      })
+      .then(res => res.json())
+      .then(data => {
+        if (data.success) {
+          document.getElementById('totalKeys').textContent = data.stats.totalKeys;
+          document.getElementById('activeKeys').textContent = data.stats.activeKeys;
+        }
+      })
+      .catch(err => console.error(err));
+    }
+    
+    // Load Keys
+    function loadKeys() {
+      fetch(SERVER_URL + '/admin/keys', {
+        headers: {
+          'Authorization': adminToken
+        }
+      })
+      .then(res => res.json())
+      .then(data => {
+        if (data.success) {
+          renderKeys(data.keys);
+        }
+      })
+      .catch(err => console.error(err));
+    }
+    
+    // Render Keys
+    function renderKeys(keys) {
+      const container = document.getElementById('keysList');
+      container.innerHTML = '';
+      
+      if (keys.length === 0) {
+        container.innerHTML = '<p style="color:#666;font-size:11px;text-align:center;">No keys generated yet</p>';
+        return;
+      }
+      
+      keys.forEach(key => {
+        const expiry = new Date(key.expiry);
+        const isExpired = expiry < new Date();
+        
+        const item = document.createElement('div');
+        item.className = 'key-item';
+        item.innerHTML = `
+          <div class="key-code">${key.key}</div>
+          <div class="key-info">
+            <span>Plan: ${key.plan}</span>
+            <span>Used: ${key.usageCount} times</span>
+            <span>Expires: ${expiry.toLocaleDateString()}</span>
+            <span class="key-status ${key.active && !isExpired ? 'active' : 'expired'}">${key.active && !isExpired ? 'Active' : 'Inactive'}</span>
+          </div>
+          ${key.active && !isExpired ? `<button class="deactivate-btn" data-key="${key.key}">Deactivate</button>` : ''}
+        `;
+        
+        // Deactivate button
+        const deactivateBtn = item.querySelector('.deactivate-btn');
+        if (deactivateBtn) {
+          deactivateBtn.addEventListener('click', () => deactivateKey(key.key));
+        }
+        
+        container.appendChild(item);
+      });
+    }
+    
+    // Generate Key
+    function generateKey() {
+      const plan = document.getElementById('planType').value;
+      let expiryDays = 30;
+      
+      switch(plan) {
+        case 'quarterly': expiryDays = 90; break;
+        case 'yearly': expiryDays = 365; break;
+        case 'lifetime': expiryDays = 999; break;
+      }
+      
+      setLoadingBtn(generateBtn, true, 'Generating...');
+      
+      fetch(SERVER_URL + '/admin/generate-key', {
+        method: 'POST',
+        headers: {
+          'Authorization': adminToken,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ plan: plan, expiryDays: expiryDays })
+      })
+      .then(res => res.json())
+      .then(data => {
+        if (data.success) {
+          document.getElementById('newKeyDisplay').textContent = data.key;
+          document.getElementById('generatedKey').style.display = 'block';
+          loadStats();
+          loadKeys();
+        } else {
+          showStatus(data.error || 'Failed to generate key', 'error');
+        }
+      })
+      .catch(err => {
+        showStatus('Error: ' + err.message, 'error');
+      })
+      .finally(() => {
+        setLoadingBtn(generateBtn, false, 'Generate Key');
+      });
+    }
+    
+    // Deactivate Key
+    function deactivateKey(key) {
+      if (!confirm('Are you sure you want to deactivate this key?')) return;
+      
+      fetch(SERVER_URL + '/admin/deactivate-key', {
+        method: 'POST',
+        headers: {
+          'Authorization': adminToken,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ key: key })
+      })
+      .then(res => res.json())
+      .then(data => {
+        if (data.success) {
+          showStatus('Key deactivated successfully', 'success');
+          loadStats();
+          loadKeys();
+        } else {
+          showStatus(data.error || 'Failed to deactivate key', 'error');
+        }
+      })
+      .catch(err => {
+        showStatus('Error: ' + err.message, 'error');
+      });
+    }
+    
+    // Helpers
+    function showStatus(msg, type) {
+      status.textContent = msg;
+      status.className = 'status ' + type;
+    }
+    
+    function setLoading(loading, label) {
+      if (loading) {
+        loginBtn.disabled = true;
+        loginBtn.innerHTML = '<span class="spinner"></span>' + label;
+      } else {
+        loginBtn.disabled = false;
+        loginBtn.textContent = 'Login to Dashboard';
+      }
+    }
+    
+    function setLoadingBtn(btn, loading, label) {
+      if (loading) {
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner"></span>' + label;
+      } else {
+        btn.disabled = false;
+        btn.textContent = label;
+      }
+    }
+  </script>
+</body>
+</html>
