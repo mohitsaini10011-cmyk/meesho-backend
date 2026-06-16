@@ -1,22 +1,12 @@
 {
   "name": "dyana-core-seller-suite",
   "version": "2.0.0",
-  "description": "Dyana Core Seller Suite Backend - AI Listing, Image Optimizer, Shipping Optimizer, Subscription & Admin Panel",
+  "description": "Dyana Core Seller Suite Backend",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
     "dev": "node server.js"
   },
-  "keywords": [
-    "dyana-core",
-    "meesho",
-    "ai-listing",
-    "shipping-optimizer",
-    "image-optimizer",
-    "subscription"
-  ],
-  "author": "Dyana Core",
-  "license": "ISC",
   "dependencies": {
     "bcryptjs": "^2.4.3",
     "cors": "^2.8.5",
