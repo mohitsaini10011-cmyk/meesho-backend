@@ -15,13 +15,7 @@ try {
 const app = express();
 const PORT = process.env.PORT || 10000;
 
-const upload = multer({
-  storage: multer.memoryStorage(),
-  limits: { fileSize: 20 * 1024 * 1024 }
-});
-
 const DATA_FILE = path.join(__dirname, "dyana-core-db.json");
-
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL || "admin@dyanacore.com";
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "admin123";
 const JWT_SECRET = process.env.JWT_SECRET || "dyanacore_super_secret_key";
@@ -31,16 +25,13 @@ const openai =
     ? new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
     : null;
 
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 20 * 1024 * 1024 }
+});
+
 app.set("trust proxy", true);
-
-app.use(
-  cors({
-    origin: "*",
-    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization"]
-  })
-);
-
+app.use(cors({ origin: "*", methods: ["GET", "POST", "OPTIONS"], allowedHeaders: ["Content-Type", "Authorization"] }));
 app.use(express.json({ limit: "25mb" }));
 app.use(express.urlencoded({ extended: true, limit: "25mb" }));
 
@@ -87,30 +78,19 @@ function clientIp(req) {
     req.ip ||
     req.connection?.remoteAddress ||
     ""
-  )
-    .toString()
-    .split(",")[0]
-    .trim()
-    .replace("::ffff:", "");
+  ).toString().split(",")[0].trim().replace("::ffff:", "");
 }
 
 function hashPassword(password, salt = crypto.randomBytes(16).toString("hex")) {
-  const hash = crypto
-    .pbkdf2Sync(String(password), salt, 120000, 64, "sha512")
-    .toString("hex");
-
+  const hash = crypto.pbkdf2Sync(String(password), salt, 120000, 64, "sha512").toString("hex");
   return `${salt}:${hash}`;
 }
 
 function verifyPassword(password, stored) {
   const [salt, hash] = String(stored || "").split(":");
   if (!salt || !hash) return false;
-
-  const test = crypto
-    .pbkdf2Sync(String(password), salt, 120000, 64, "sha512")
-    .toString("hex");
-
   try {
+    const test = crypto.pbkdf2Sync(String(password), salt, 120000, 64, "sha512").toString("hex");
     return crypto.timingSafeEqual(Buffer.from(hash, "hex"), Buffer.from(test, "hex"));
   } catch {
     return false;
@@ -128,7 +108,6 @@ function tokenVerify(token) {
   if (!body || !sig) return null;
 
   const expected = crypto.createHmac("sha256", JWT_SECRET).update(body).digest("base64url");
-
   if (sig !== expected) return null;
 
   try {
@@ -154,25 +133,26 @@ function publicUser(user) {
     id: user.id,
     email: user.email,
     name: user.name || "",
+    role: user.role || "user",
     status: user.status || "active",
+    active: user.status !== "blocked" && !isExpired(user),
     lockedIp: user.lockedIp || "",
     lockedDeviceId: user.lockedDeviceId || "",
     subscription: user.subscription || {},
     createdAt: user.createdAt,
-    lastLoginAt: user.lastLoginAt,
-    role: user.role || "user"
+    lastLoginAt: user.lastLoginAt
   };
 }
 
 function ensureAdminUser() {
   const db = readDB();
   const email = normEmail(ADMIN_EMAIL);
-
   const existing = db.users.find(u => u.email === email);
 
   if (existing) {
     existing.role = "admin";
     existing.status = "active";
+    existing.passwordHash = hashPassword(ADMIN_PASSWORD);
     existing.subscription = {
       planId: "lifetime",
       planName: "Lifetime",
@@ -209,24 +189,14 @@ function authRequired(req, res, next) {
   const token = (req.headers.authorization || "").replace(/^Bearer\s+/i, "");
   const payload = tokenVerify(token);
 
-  if (!payload?.uid) {
-    return res.status(401).json({ success: false, error: "LOGIN_REQUIRED" });
-  }
+  if (!payload?.uid) return res.status(401).json({ success: false, error: "LOGIN_REQUIRED" });
 
   const db = readDB();
   const user = db.users.find(u => u.id === payload.uid);
 
-  if (!user) {
-    return res.status(401).json({ success: false, error: "USER_NOT_FOUND" });
-  }
-
-  if (user.status === "blocked") {
-    return res.status(403).json({ success: false, error: "ACCOUNT_BLOCKED" });
-  }
-
-  if (isExpired(user)) {
-    return res.status(402).json({ success: false, error: "SUBSCRIPTION_EXPIRED" });
-  }
+  if (!user) return res.status(401).json({ success: false, error: "USER_NOT_FOUND" });
+  if (user.status === "blocked") return res.status(403).json({ success: false, error: "ACCOUNT_BLOCKED" });
+  if (isExpired(user)) return res.status(402).json({ success: false, error: "SUBSCRIPTION_EXPIRED" });
 
   req.user = user;
   next();
@@ -236,9 +206,7 @@ function adminRequired(req, res, next) {
   const token = (req.headers.authorization || "").replace(/^Bearer\s+/i, "");
   const payload = tokenVerify(token);
 
-  if (payload?.role === "admin") {
-    return next();
-  }
+  if (payload?.role === "admin") return next();
 
   return res.status(401).json({ success: false, error: "ADMIN_LOGIN_REQUIRED" });
 }
@@ -251,7 +219,6 @@ app.get("/", (req, res) => {
 
 app.get("/health", (req, res) => {
   const db = readDB();
-
   res.json({
     status: "ok",
     server: "dyana-core-seller-suite",
@@ -263,40 +230,22 @@ app.get("/health", (req, res) => {
 });
 
 app.get("/plans", (req, res) => {
-  res.json({
-    success: true,
-    plans: readDB().plans.filter(p => p.active)
-  });
+  res.json({ success: true, plans: readDB().plans.filter(p => p.active) });
 });
 
 app.post("/auth/signup", (req, res) => {
   const db = readDB();
-
   const email = normEmail(req.body.email);
   const password = String(req.body.password || "");
   const name = String(req.body.name || "").trim();
   const deviceId = String(req.body.deviceId || "").trim();
   const ip = clientIp(req);
 
-  if (!email || !email.includes("@")) {
-    return res.status(400).json({ success: false, error: "Valid email required" });
-  }
+  if (!email || !email.includes("@")) return res.status(400).json({ success: false, error: "Valid email required" });
+  if (password.length < 6) return res.status(400).json({ success: false, error: "Password minimum 6 characters" });
+  if (db.users.some(u => u.email === email)) return res.status(409).json({ success: false, error: "Email already registered. Please login." });
 
-  if (password.length < 6) {
-    return res.status(400).json({ success: false, error: "Password minimum 6 characters" });
-  }
-
-  if (db.users.some(u => u.email === email)) {
-    return res.status(409).json({
-      success: false,
-      error: "Email already registered. Please login."
-    });
-  }
-
-  const trial = db.plans.find(p => p.id === "trial") || {
-    days: 3,
-    name: "Free Trial"
-  };
+  const trial = db.plans.find(p => p.id === "trial") || { days: 3, name: "Free Trial" };
 
   const user = {
     id: crypto.randomUUID(),
@@ -318,35 +267,15 @@ app.post("/auth/signup", (req, res) => {
   };
 
   db.users.push(user);
-
-  db.loginLogs.push({
-    email,
-    ip,
-    deviceId,
-    type: "signup",
-    at: nowISO(),
-    success: true
-  });
-
+  db.loginLogs.push({ email, ip, deviceId, type: "signup", at: nowISO(), success: true });
   writeDB(db);
 
-  const token = tokenSign({
-    uid: user.id,
-    email: user.email,
-    role: user.role,
-    iat: Date.now()
-  });
-
-  res.json({
-    success: true,
-    token,
-    user: publicUser(user)
-  });
+  const token = tokenSign({ uid: user.id, email: user.email, role: user.role, iat: Date.now() });
+  res.json({ success: true, token, user: publicUser(user) });
 });
 
 app.post("/auth/login", (req, res) => {
   const db = readDB();
-
   const email = normEmail(req.body.email);
   const password = String(req.body.password || "");
   const deviceId = String(req.body.deviceId || "").trim();
@@ -355,78 +284,30 @@ app.post("/auth/login", (req, res) => {
   const user = db.users.find(u => u.email === email);
 
   if (!user || !verifyPassword(password, user.passwordHash)) {
-    db.loginLogs.push({
-      email,
-      ip,
-      deviceId,
-      type: "login",
-      at: nowISO(),
-      success: false,
-      reason: "bad_credentials"
-    });
-
+    db.loginLogs.push({ email, ip, deviceId, type: "login", at: nowISO(), success: false, reason: "bad_credentials" });
     writeDB(db);
-
-    return res.status(401).json({
-      success: false,
-      error: "Invalid email or password"
-    });
+    return res.status(401).json({ success: false, error: "Invalid email or password" });
   }
 
-  if (user.status === "blocked") {
-    return res.status(403).json({
-      success: false,
-      error: "Your account is blocked. Contact admin."
-    });
-  }
-
-  if (isExpired(user)) {
-    return res.status(402).json({
-      success: false,
-      error: "Subscription expired. Please renew your plan."
-    });
-  }
+  if (user.status === "blocked") return res.status(403).json({ success: false, error: "Your account is blocked. Contact admin." });
+  if (isExpired(user)) return res.status(402).json({ success: false, error: "Subscription expired. Please renew your plan." });
 
   if (user.role !== "admin") {
     if (user.lockedIp && user.lockedIp !== ip) {
-      db.loginLogs.push({
-        email,
-        ip,
-        deviceId,
-        type: "login",
-        at: nowISO(),
-        success: false,
-        reason: "ip_locked",
-        lockedIp: user.lockedIp
-      });
-
+      db.loginLogs.push({ email, ip, deviceId, type: "login", at: nowISO(), success: false, reason: "ip_locked", lockedIp: user.lockedIp });
       writeDB(db);
-
       return res.status(423).json({
         success: false,
-        error:
-          "This email is already active on another IP. Please buy another subscription or ask admin to reset IP."
+        error: "This email is already active on another IP. Please buy another subscription or ask admin to reset IP."
       });
     }
 
     if (user.lockedDeviceId && deviceId && user.lockedDeviceId !== deviceId) {
-      db.loginLogs.push({
-        email,
-        ip,
-        deviceId,
-        type: "login",
-        at: nowISO(),
-        success: false,
-        reason: "device_locked",
-        lockedDeviceId: user.lockedDeviceId
-      });
-
+      db.loginLogs.push({ email, ip, deviceId, type: "login", at: nowISO(), success: false, reason: "device_locked", lockedDeviceId: user.lockedDeviceId });
       writeDB(db);
-
       return res.status(423).json({
         success: false,
-        error:
-          "This email is already active on another device. Please buy another subscription or ask admin to reset device."
+        error: "This email is already active on another device. Please buy another subscription or ask admin to reset device."
       });
     }
 
@@ -435,44 +316,19 @@ app.post("/auth/login", (req, res) => {
   }
 
   user.lastLoginAt = nowISO();
-
-  db.loginLogs.push({
-    email,
-    ip,
-    deviceId,
-    type: "login",
-    at: nowISO(),
-    success: true
-  });
-
+  db.loginLogs.push({ email, ip, deviceId, type: "login", at: nowISO(), success: true });
   writeDB(db);
 
-  const token = tokenSign({
-    uid: user.id,
-    email: user.email,
-    role: user.role || "user",
-    iat: Date.now()
-  });
-
-  res.json({
-    success: true,
-    token,
-    user: publicUser(user)
-  });
+  const token = tokenSign({ uid: user.id, email: user.email, role: user.role || "user", iat: Date.now() });
+  res.json({ success: true, token, user: publicUser(user) });
 });
 
 app.post("/auth/check-session", authRequired, (req, res) => {
-  res.json({
-    success: true,
-    user: publicUser(req.user)
-  });
+  res.json({ success: true, user: publicUser(req.user) });
 });
 
 app.post("/auth/logout", (req, res) => {
-  res.json({
-    success: true,
-    message: "Logged out"
-  });
+  res.json({ success: true, message: "Logged out" });
 });
 
 app.post("/validate-license", (req, res) => {
@@ -487,7 +343,6 @@ app.post("/validate-license", (req, res) => {
 
 app.post("/admin/login", (req, res) => {
   const db = readDB();
-
   const email = normEmail(req.body.email);
   const password = String(req.body.password || "");
 
@@ -501,25 +356,16 @@ app.post("/admin/login", (req, res) => {
 
     return res.json({
       success: true,
-      token: tokenSign({
-        uid: admin.id,
-        role: "admin",
-        email,
-        iat: Date.now()
-      }),
+      token: tokenSign({ uid: admin.id, role: "admin", email, iat: Date.now() }),
       admin: publicUser(admin)
     });
   }
 
-  return res.status(401).json({
-    success: false,
-    error: "Invalid admin email/password"
-  });
+  return res.status(401).json({ success: false, error: "Invalid admin email/password" });
 });
 
 app.get("/admin/users", adminRequired, (req, res) => {
   const db = readDB();
-
   res.json({
     success: true,
     users: db.users.map(publicUser),
@@ -530,15 +376,11 @@ app.get("/admin/users", adminRequired, (req, res) => {
 
 app.post("/admin/users/create", adminRequired, (req, res) => {
   const db = readDB();
-
   const email = normEmail(req.body.email);
   const password = String(req.body.password || "123456");
 
   if (!email || db.users.some(u => u.email === email)) {
-    return res.status(400).json({
-      success: false,
-      error: "Email missing or already exists"
-    });
+    return res.status(400).json({ success: false, error: "Email missing or already exists" });
   }
 
   const planId = req.body.planId || "monthly";
@@ -566,27 +408,16 @@ app.post("/admin/users/create", adminRequired, (req, res) => {
   db.users.push(user);
   writeDB(db);
 
-  res.json({
-    success: true,
-    user: publicUser(user)
-  });
+  res.json({ success: true, user: publicUser(user) });
 });
 
 app.post("/admin/users/update-plan", adminRequired, (req, res) => {
   const db = readDB();
 
-  const user = db.users.find(
-    u => u.id === req.body.userId || u.email === normEmail(req.body.email)
-  );
-
+  const user = db.users.find(u => u.id === req.body.userId || u.email === normEmail(req.body.email));
   const plan = db.plans.find(p => p.id === req.body.planId);
 
-  if (!user || !plan) {
-    return res.status(404).json({
-      success: false,
-      error: "User or plan not found"
-    });
-  }
+  if (!user || !plan) return res.status(404).json({ success: false, error: "User or plan not found" });
 
   user.subscription = {
     planId: plan.id,
@@ -596,119 +427,73 @@ app.post("/admin/users/update-plan", adminRequired, (req, res) => {
   };
 
   user.status = "active";
-
   writeDB(db);
 
-  res.json({
-    success: true,
-    user: publicUser(user)
-  });
+  res.json({ success: true, user: publicUser(user) });
 });
 
 app.post("/admin/users/block", adminRequired, (req, res) => {
   const db = readDB();
+  const user = db.users.find(u => u.id === req.body.userId || u.email === normEmail(req.body.email));
 
-  const user = db.users.find(
-    u => u.id === req.body.userId || u.email === normEmail(req.body.email)
-  );
-
-  if (!user) {
-    return res.status(404).json({
-      success: false,
-      error: "User not found"
-    });
-  }
+  if (!user) return res.status(404).json({ success: false, error: "User not found" });
 
   user.status = req.body.block || req.body.blocked ? "blocked" : "active";
-
   writeDB(db);
 
-  res.json({
-    success: true,
-    user: publicUser(user)
-  });
+  res.json({ success: true, user: publicUser(user) });
 });
 
 app.post("/admin/users/reset-device", adminRequired, (req, res) => {
   const db = readDB();
+  const user = db.users.find(u => u.id === req.body.userId || u.email === normEmail(req.body.email));
 
-  const user = db.users.find(
-    u => u.id === req.body.userId || u.email === normEmail(req.body.email)
-  );
-
-  if (!user) {
-    return res.status(404).json({
-      success: false,
-      error: "User not found"
-    });
-  }
+  if (!user) return res.status(404).json({ success: false, error: "User not found" });
 
   user.lockedIp = "";
   user.lockedDeviceId = "";
-
   writeDB(db);
 
-  res.json({
-    success: true,
-    user: publicUser(user)
-  });
+  res.json({ success: true, user: publicUser(user) });
 });
 
 app.post("/admin/users/reset-lock", adminRequired, (req, res) => {
   const db = readDB();
+  const user = db.users.find(u => u.id === req.body.userId || u.email === normEmail(req.body.email));
 
-  const user = db.users.find(
-    u => u.id === req.body.userId || u.email === normEmail(req.body.email)
-  );
-
-  if (!user) {
-    return res.status(404).json({
-      success: false,
-      error: "User not found"
-    });
-  }
+  if (!user) return res.status(404).json({ success: false, error: "User not found" });
 
   user.lockedIp = "";
   user.lockedDeviceId = "";
-
   writeDB(db);
 
-  res.json({
-    success: true,
-    user: publicUser(user)
-  });
+  res.json({ success: true, user: publicUser(user) });
 });
 
 app.post("/admin/users/delete", adminRequired, (req, res) => {
   const db = readDB();
-
-  db.users = db.users.filter(
-    u => !(u.id === req.body.userId || u.email === normEmail(req.body.email))
-  );
-
+  db.users = db.users.filter(u => !(u.id === req.body.userId || u.email === normEmail(req.body.email)));
   writeDB(db);
 
-  res.json({
-    success: true
-  });
+  res.json({ success: true });
 });
 
 app.post("/admin/plans/save", adminRequired, (req, res) => {
   const db = readDB();
-
   const p = req.body.plan || {};
 
-  if (!p.id || !p.name) {
-    return res.status(400).json({
-      success: false,
-      error: "Plan id/name required"
-    });
-  }
+  if (!p.id || !p.name) return res.status(400).json({ success: false, error: "Plan id/name required" });
 
   const existing = db.plans.find(x => x.id === p.id);
 
   if (existing) {
-    Object.assign(existing, p);
+    Object.assign(existing, {
+      id: p.id,
+      name: p.name,
+      days: Number(p.days || 30),
+      price: Number(p.price || 0),
+      active: p.active !== false
+    });
   } else {
     db.plans.push({
       id: p.id,
@@ -720,11 +505,7 @@ app.post("/admin/plans/save", adminRequired, (req, res) => {
   }
 
   writeDB(db);
-
-  res.json({
-    success: true,
-    plans: db.plans
-  });
+  res.json({ success: true, plans: db.plans });
 });
 
 app.use(
@@ -734,12 +515,7 @@ app.use(
 
 app.post("/generate", upload.single("image"), async (req, res) => {
   try {
-    if (!req.file) {
-      return res.status(400).json({
-        success: false,
-        error: "No image uploaded"
-      });
-    }
+    if (!req.file) return res.status(400).json({ success: false, error: "No image uploaded" });
 
     let result =
       "Women's fashion product. Generate a Meesho-ready title, color, fabric, SKU, price, GST, HSN, weight, packaging size and SEO description.";
@@ -755,8 +531,7 @@ app.post("/generate", upload.single("image"), async (req, res) => {
             content: [
               {
                 type: "text",
-                text:
-                  "Analyze this product image for a Meesho seller. Return concise product details: category, color, fabric, style, title, description, suggested price, weight and dimensions."
+                text: "Analyze this product image for a Meesho seller. Return concise product details: category, color, fabric, style, title, description, suggested price, weight and dimensions."
               },
               {
                 type: "image_url",
@@ -773,44 +548,28 @@ app.post("/generate", upload.single("image"), async (req, res) => {
       result = response.choices?.[0]?.message?.content || result;
     }
 
+    res.json({ success: true, result });
+  } catch {
     res.json({
       success: true,
-      result
-    });
-  } catch (e) {
-    res.json({
-      success: true,
-      result:
-        "Dyana Core fashion product. Premium quality, stylish, comfortable and suitable for casual/festive wear."
+      result: "Dyana Core fashion product. Premium quality, stylish, comfortable and suitable for casual/festive wear."
     });
   }
 });
 
 app.post("/generate-from-form", (req, res) => {
   try {
-    res.json({
-      success: true,
-      fields: buildFields(req.body.description || "")
-    });
+    res.json({ success: true, fields: buildFields(req.body.description || "") });
   } catch (e) {
-    res.status(500).json({
-      success: false,
-      error: e.message
-    });
+    res.status(500).json({ success: false, error: e.message });
   }
 });
 
 app.post("/generate-from-text", (req, res) => {
   try {
-    res.json({
-      success: true,
-      fields: buildFields(req.body.description || "")
-    });
+    res.json({ success: true, fields: buildFields(req.body.description || "") });
   } catch (e) {
-    res.status(500).json({
-      success: false,
-      error: e.message
-    });
+    res.status(500).json({ success: false, error: e.message });
   }
 });
 
@@ -826,18 +585,12 @@ app.post("/shipping-optimize", (req, res) => {
     innerwear: { weight: 180, length: 22, breadth: 18, height: 3 }
   };
 
-  const suggestion = map[type] || {
-    weight: 450,
-    length: 28,
-    breadth: 22,
-    height: 5
-  };
+  const suggestion = map[type] || { weight: 450, length: 28, breadth: 22, height: 5 };
 
   res.json({
     success: true,
     suggestion,
-    warning:
-      "Use actual packed product measurement. Wrong weight/dimension can cause penalty."
+    warning: "Use actual packed product measurement. Wrong weight/dimension can cause penalty."
   });
 });
 
@@ -866,23 +619,12 @@ function buildFields(description) {
 }
 
 function f(key, value) {
-  return {
-    key,
-    label: key,
-    value: value || ""
-  };
+  return { key, label: key, value: value || "" };
 }
 
 function makeTitle(text = "") {
-  const clean = String(text)
-    .replace(/\s+/g, " ")
-    .replace(/Meesho price.*$/i, "")
-    .trim();
-
-  return (
-    clean.split(".")[0].slice(0, 75).trim() ||
-    "Dyana Core Women's Fashion Product"
-  );
+  const clean = String(text).replace(/\s+/g, " ").replace(/Meesho price.*$/i, "").trim();
+  return clean.split(".")[0].slice(0, 75).trim() || "Dyana Core Women's Fashion Product";
 }
 
 function makeDescription(text = "") {
@@ -899,22 +641,8 @@ function extractPrice(text = "") {
 
 function extractColor(text = "") {
   const colors = [
-    "red",
-    "blue",
-    "black",
-    "white",
-    "pink",
-    "green",
-    "yellow",
-    "grey",
-    "gray",
-    "purple",
-    "maroon",
-    "orange",
-    "beige",
-    "brown",
-    "sky blue",
-    "dark blue"
+    "red", "blue", "black", "white", "pink", "green", "yellow", "grey", "gray",
+    "purple", "maroon", "orange", "beige", "brown", "sky blue", "dark blue"
   ];
 
   const lower = String(text).toLowerCase();
